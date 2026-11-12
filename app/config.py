@@ -133,7 +133,7 @@ class Settings:
     openrouter_catalog_timeout: float = _float_env("MERIDIAN_OPENROUTER_CATALOG_TIMEOUT", 5.0)
     openrouter_max_fallbacks: int = _int_env("MERIDIAN_OPENROUTER_FALLBACKS", 4)
 
-    signature_trio: Tuple[str, str, str] = ("#0A1628", "#C9A84C", "#EDE4D3")
+    signature_trio: Tuple[str, str, str] = ("#0B0906", "#C6A15B", "#F3ECDD")
 
     @property
     def port(self) -> int:

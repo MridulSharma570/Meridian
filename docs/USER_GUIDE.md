@@ -169,12 +169,15 @@ For each slot:
 2. Pick a **model** (auto-populated for that provider). For
    **OpenRouter (Free)** the default is **Auto — best free model (live)**:
    Meridian reads OpenRouter's public free-model catalogue, ranks the currently
-   available zero-cost chat models and sends an all-free fallback chain. If a
+   available explicit `:free` chat models and sends an all-free fallback chain. If a
    free model is retired or rate-limited, the next free model is tried
    automatically and the failed one is cooled down. No paid model is ever
-   selected; the alternative **OpenRouter free router (random)** lets
+   selected; $0 previews without `:free` are excluded because they can require
+   a funded account. The alternative **OpenRouter free router (random)** lets
    OpenRouter pick any free model at random. You can still pin a specific
-   `…:free` slug for reproducible output.
+   `…:free` slug for reproducible output. If a test returns HTTP 402, check
+   the OpenRouter key's account and per-key credit limit; the slot remains
+   marked **SAVED · TEST FAILED** until a test succeeds.
 3. Paste the key into the password field (eye icon shows/hides it).
 4. Press **Save key** → it is Fernet-encrypted and stored; the card shows a
    masked value like `gsk_T••••••••7890`.

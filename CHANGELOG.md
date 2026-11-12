@@ -58,6 +58,25 @@ here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — OpenRouter 402, provider errors and universal fit
+- OpenRouter (Free) now accepts only explicit `:free` variants whose every
+  published price field is zero. $0 previews without `:free` — which can
+  require a funded account — are excluded, and unsafe saved selections are
+  upgraded to Auto. HTTP 402 responses are parsed into one concise,
+  actionable billing-gate message; raw provider JSON is never dumped into
+  Settings toasts, and a failed test marks the slot **SAVED · TEST FAILED**.
+- Settings now preserves the stored key when the key field is left blank,
+  preserves pinned live `:free` models in the dropdown, updates the tested
+  state in place, and no longer double-opens chat from the Ask button.
+  Browser Back/Forward now follows the SPA hash routes.
+- Replaced the blue/violet-accented theme with a three-colour atelier system:
+  **Obsidian `#0B0906`**, **Champagne `#C6A15B`** and **Pearl `#F3ECDD`**,
+  applied consistently to the SPA, Streamlit UI, exports, icons and docs.
+- Added universal fit rules for cards, forms, tables, charts, drawers, chat,
+  toasts and fixed controls across desktop, tablet and phone widths. The
+  labelled Menu drawer remains the only phone navigation; no bottom bar was
+  reintroduced.
+
 ### Fixed — No answers without a real API
 - Removed the production behaviour that generated complete reports, chat
   answers, translations and comparisons from the deterministic local engine

@@ -1,7 +1,7 @@
 # Images
 
 `meridian-logo.svg` — the official Meridian diamond mark: a gold diamond outline
-with a nested inner diamond and an ivory "M" on Deep Navy.
+with a nested inner diamond and a pearl "M" on Obsidian.
 
 The SPA renders its logo as inline SVG in `app/web/index.html` (no external image
 request) and ships `app/web/favicon.svg` for the browser tab. Decorative mesh

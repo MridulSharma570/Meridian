@@ -37,8 +37,8 @@ def render() -> None:
         st.success(data["verdict"])
         st.dataframe(data["metrics"], use_container_width=True, hide_index=True)
         fig = go.Figure()
-        for name, dsx, colour in ((data["company_a"], data["dataset_a"], "#C9A84C"),
-                                  (data["company_b"], data["dataset_b"], "#4C7BF3")):
+        for name, dsx, colour in ((data["company_a"], data["dataset_a"], "#C6A15B"),
+                                  (data["company_b"], data["dataset_b"], "#E7CE8C")):
             fig.add_trace(go.Scatter(x=[h["year"] for h in dsx["history"]],
                                      y=[h["value"] for h in dsx["history"]], name=name,
                                      line=dict(color=colour, width=3)))

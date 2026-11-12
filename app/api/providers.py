@@ -163,9 +163,21 @@ def is_allowed_model(provider_key: str, model: str) -> bool:
 
 
 def normalize_model(provider_key: str, model: str) -> str:
-    """Upgrade a retired hard-coded free slug to live auto-selection."""
-    if provider_key == "openrouter_free" and model in OPENROUTER_LEGACY_MODELS:
-        return OPENROUTER_AUTO_MODEL
+    """Upgrade retired or unsafe OpenRouter free selections to auto mode.
+
+    Older builds could save a $0-priced preview whose ID did not end in
+    ``:free``. OpenRouter may require a funded account for those models even
+    though prompt/completion pricing is zero, which surfaces as HTTP 402.
+    Any saved OpenRouter (Free) model that is not the auto sentinel, the
+    free router or an explicit ``:free`` variant is therefore upgraded to
+    live auto-selection instead of being sent upstream unchanged.
+    """
+    if provider_key == "openrouter_free":
+        if model in OPENROUTER_LEGACY_MODELS:
+            return OPENROUTER_AUTO_MODEL
+        if model and model not in (OPENROUTER_AUTO_MODEL, OPENROUTER_FREE_ROUTER) \
+                and not model.endswith(":free"):
+            return OPENROUTER_AUTO_MODEL
     return model
 
 

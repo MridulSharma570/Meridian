@@ -166,14 +166,20 @@ def test_real_openrouter_catalogue_shape_is_accepted():
                       endpoints=["/api/v1/batches"])
     zero_price_preview = dict(real_free, id="vendor/zero-cost-preview",
                               pricing={"prompt": "0", "completion": "0"})
+    hidden_charge = dict(real_free, id="vendor/hidden-charge:free",
+                         pricing={"prompt": "0", "completion": "0",
+                                  "request": "0.01"})
     assert auto._is_free_chat_model(real_free, time.time())
-    assert auto._is_free_chat_model(zero_price_preview, time.time())
+    # A $0 preview without the :free suffix can still demand a funded
+    # OpenRouter account and produce HTTP 402; it is not a free variant.
+    assert not auto._is_free_chat_model(zero_price_preview, time.time())
+    assert not auto._is_free_chat_model(hidden_charge, time.time())
     assert not auto._is_free_chat_model(real_paid, time.time())
     assert not auto._is_free_chat_model(real_batch, time.time())
     ranked = auto._rank([real_free, real_paid, real_batch, zero_price_preview])
     assert ranked[0].id == real_free["id"]        # :free + benchmarks wins
     assert ranked[0].supports_json and ranked[0].supports_tools
-    assert {m.id for m in ranked} == {real_free["id"], zero_price_preview["id"]}
+    assert {m.id for m in ranked} == {real_free["id"]}
 
 
 def test_quality_benchmark_bonus_breaks_a_metadata_tie():
@@ -295,6 +301,10 @@ def test_free_provider_accepts_any_free_slug_but_rejects_paid_slugs():
 def test_retired_hard_coded_slugs_are_upgraded_to_auto():
     for old in OPENROUTER_LEGACY_MODELS:
         assert normalize_model("openrouter_free", old) == OPENROUTER_AUTO_MODEL
+    # $0 previews and paid slugs saved by an older build are unsafe on a
+    # free slot: they can trigger OpenRouter's funded-account 402 gate.
+    assert normalize_model("openrouter_free", "vendor/zero-cost-preview") == OPENROUTER_AUTO_MODEL
+    assert normalize_model("openrouter_free", "openai/gpt-4o") == OPENROUTER_AUTO_MODEL
     assert normalize_model("groq", OPENROUTER_LEGACY_MODELS[0]) == OPENROUTER_LEGACY_MODELS[0]
 
 
@@ -307,9 +317,20 @@ def test_save_key_stores_auto_and_normalizes_existing_legacy_models():
         status = next(s for s in key_manager.key_status() if s["slot"] == "writer")
         assert status["model_label"].startswith("Auto")
         assert "test-dummy-key" not in status["masked_key"]
+    # A paid slug submitted to the free provider is upgraded to the safe
+    # auto selector rather than ever being sent to OpenRouter as-is.
     key_manager.save_key("writer", "openrouter_free",
                          "test-dummy-key-openrouter-000111", "openai/gpt-4o")
     assert key_manager.get_credentials("writer")["model"] == OPENROUTER_AUTO_MODEL
+
+
+def test_blank_key_save_keeps_the_existing_encrypted_key():
+    key_manager.save_key("writer", "groq", "gsk_test_dummy_key_000111",
+                         "llama-3.3-70b-versatile")
+    key_manager.save_key("writer", "groq", "", "gemma2-9b-it")
+    creds = key_manager.get_credentials("writer")
+    assert creds["api_key"] == "gsk_test_dummy_key_000111"
+    assert creds["model"] == "gemma2-9b-it"
 
 
 # --------------------------------------------------------------------------- #
@@ -408,7 +429,37 @@ def test_auth_failure_is_not_retried_and_does_not_leak_the_key(monkeypatch):
     assert len(calls) == 1
     assert "testvalue123" not in str(exc.value)
     assert fake_secret not in str(exc.value)
-    assert "<redacted>" in str(exc.value)
+    assert exc.value.category == "authentication"
+    assert "testvalue123" not in (exc.value.provider_message or "")
+
+
+def test_openrouter_402_is_actionable_and_never_dumps_raw_billing_json(monkeypatch):
+    key_manager.save_key("writer", "openrouter_free",
+                         "test-dummy-key-openrouter-000111", OPENROUTER_AUTO_MODEL)
+    calls = []
+    raw = json.dumps({"error": {
+        "message": "Insufficient credits. This account never purchased credits.",
+        "code": 402,
+        "metadata": {"limit_source": "openrouter_credits",
+                     "remedy_hint": "Add credits at https://openrouter.ai/settings/credits"},
+    }})
+
+    def post(url, *, headers, json, timeout):
+        calls.append(json)
+        return FakeResponse(402, text=raw)
+
+    monkeypatch.setattr(llm_router.requests, "post", post)
+    with pytest.raises(llm_router.LLMError) as exc:
+        llm_router.call_llm("writer", "sys", "user")
+
+    # A billing/account gate is not retried against every free model, and the
+    # UI receives a concise explanation rather than nested provider JSON.
+    assert len(calls) == 1
+    assert exc.value.status == 402
+    assert exc.value.category == "openrouter_credit_gate"
+    assert ":free" in str(exc.value) and "per-key credit limit" in str(exc.value)
+    assert "limit_source" not in str(exc.value) and "remedy_hint" not in str(exc.value)
+    assert "openrouter.ai/settings/credits" not in str(exc.value)
 
 
 def test_pinned_free_model_reaches_openrouter_unchanged(monkeypatch):

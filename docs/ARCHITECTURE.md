@@ -126,9 +126,9 @@ Each node is wrapped by `BaseAgent.run()`:
 
 ## 6. Design system
 
-Signature trio: **Deep Navy `#0A1628`**, **Champagne Gold `#C9A84C`**,
-**Ivory Platinum `#EDE4D3`**. Sapphire `#4C7BF3` and amethyst `#8B7CF6` appear
-only in gradient accents. Satoshi Bold / Inter / JetBrains Mono, 4px type grid,
+Signature trio: **Obsidian `#0B0906`**, **Champagne `#C6A15B`**,
+**Pearl `#F3ECDD`**. All gradients, charts and status treatments are tints,
+shades or alpha values of those three colours. Satoshi Bold / Inter / JetBrains Mono, 4px type grid,
 8px spacing, 16px glassmorphic cards, layered shadows, dark mode only.
 
 All charts are hand-built interactive SVG — no CDN JavaScript, no build step.

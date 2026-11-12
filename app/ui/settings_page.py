@@ -61,16 +61,27 @@ def render() -> None:
                       for m in auto["models"][:10]],
                      use_container_width=True, hide_index=True)
         st.caption("Choose **Auto — best free model (live)** in an OpenRouter (Free) slot. "
-                   "Meridian ranks the live zero-price catalogue and retries on an all-free "
-                   "fallback chain; paid models are never used.")
+                   "Meridian ranks only explicit **:free** variants and retries on an all-free "
+                   "fallback chain; $0 previews and paid models are never used. HTTP 402 means "
+                   "OpenRouter's account/key billing gate blocked the call — check the key's "
+                   "account and per-key credit limit before buying anything.")
 
     st.markdown("### Agent key slots")
     cols = st.columns(2)
     for i, slot in enumerate(payload["slots"]):
         with cols[i % 2]:
             card_start(f"{slot['icon']}  {slot['name']}", slot["description"])
-            st.markdown(badge("CONFIGURED", "ok") if slot["configured"] else badge("NO KEY"),
-                        unsafe_allow_html=True)
+            if slot.get("key_error"):
+                state_badge = badge("KEY UNREADABLE — RE-ENTER", "bad")
+            elif not slot["configured"]:
+                state_badge = badge("NO KEY")
+            elif slot.get("last_test_ok") is True:
+                state_badge = badge("WORKING · TESTED", "ok")
+            elif slot.get("last_test_ok") is False:
+                state_badge = badge("SAVED · TEST FAILED", "bad")
+            else:
+                state_badge = badge("SAVED · NOT TESTED", "ok")
+            st.markdown(state_badge, unsafe_allow_html=True)
             if slot["configured"]:
                 st.code(f"{slot['masked_key']}  ·  {slot['provider']}  ·  {slot['model']}")
             provider_keys = [p["key"] for p in payload["providers"]]
@@ -82,21 +93,21 @@ def render() -> None:
             labels = spec.get("model_labels") or {}
             model = st.selectbox("Model", spec["models"],
                                  format_func=lambda m: labels.get(m, m),
-                                 key=f"model_{slot['slot']}")
+                                 key=f"model_{slot['slot']}_{prov}")
             key = st.text_input("API key (blank keeps the stored one)", type="password",
                                 placeholder=spec["key_hint"], key=f"key_{slot['slot']}")
             b1, b2, b3 = st.columns(3)
             with b1:
                 if st.button("Save", key=f"save_{slot['slot']}", use_container_width=True):
-                    if key.strip():
-                        try:
-                            services.save_key(slot["slot"], prov, key.strip(), model)
-                            st.success("Saved & encrypted")
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(str(exc))
-                    else:
-                        st.error("Enter a key")
+                    try:
+                        # Blank intentionally keeps the stored key (the
+                        # service preserves it); it errors only when the
+                        # slot has never been configured.
+                        services.save_key(slot["slot"], prov, key.strip(), model)
+                        st.success("Saved & encrypted")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
             with b2:
                 if st.button("Test", key=f"test_{slot['slot']}", use_container_width=True):
                     with st.spinner("Testing…"):
