@@ -19,14 +19,17 @@
   --f-head:'Satoshi','Inter',system-ui,-apple-system,sans-serif;
   --f-body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
   --f-mono:'JetBrains Mono','SFMono-Regular',Consolas,monospace;
-  --sidebar:248px; --mission:292px; --tabbar-h:60px;
+  --sidebar:248px; --mission:292px;
 }
 *,*::before,*::after{box-sizing:border-box}
-html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{scroll-behavior:smooth;scroll-padding-top:76px;
+  -webkit-text-size-adjust:100%;text-size-adjust:100%;max-width:100%}
 body{margin:0;background:var(--navy);color:var(--white);font-family:var(--f-body);
-  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  overflow-x:hidden;max-width:100%}
 button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer;border:0;background:none}
+button{cursor:pointer;border:0;background:none;touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent}
 a{color:var(--gold);text-decoration:none}
 a:hover{color:var(--gold-2)}
 svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;
@@ -294,7 +297,8 @@ select{padding-right:28px;appearance:none;
 .legend span:hover{color:var(--white)}
 .legend i{width:9px;height:9px;border-radius:3px;display:block}
 .heat-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px}
-.heat-grid{display:grid;gap:4px;align-items:center;min-width:0}
+.heat-grid{display:grid;gap:4px;align-items:center;min-width:0;
+  grid-template-columns:104px repeat(var(--heat-cols,8),minmax(0,1fr))}
 .heat-cell{height:26px;border-radius:5px;position:relative;cursor:pointer;transition:transform .15s,box-shadow .15s}
 .heat-cell:hover{transform:scale(1.12);box-shadow:0 0 0 2px var(--gold);z-index:2}
 .heat-lbl{font-size:10px;color:var(--muted);white-space:nowrap}
@@ -490,9 +494,9 @@ select{padding-right:28px;appearance:none;
 
 /* ---------- Navigation drawers / mobile chrome ---------------------------
    Desktop uses the three-column grid. Below 1100px the sidebar and the Agent
-   Activity rail become off-canvas drawers, and a bottom tab bar gives
-   thumb-friendly navigation. The menu button therefore always has a job:
-   collapse/expand on desktop, open/close the drawer on small screens.
+   Activity rail become off-canvas drawers reached from a labelled Menu button
+   in the top bar. There is deliberately NO bottom navigation bar: on a phone
+   the whole viewport belongs to the content.
    -------------------------------------------------------------------------- */
 .scrim{position:fixed;inset:0;z-index:50;background:rgba(3,9,20,.68);
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
@@ -504,6 +508,11 @@ body.nav-open .scrim,body.mission-open .scrim{opacity:1;visibility:visible;point
 .mobile-brand{display:none;align-items:center;gap:7px;font-family:var(--f-head);
   font-weight:900;font-size:13px;letter-spacing:.14em;color:var(--ivory);white-space:nowrap}
 .mobile-brand span{color:var(--gold);font-size:15px}
+.menu-label{display:none;font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+.skip-link{position:fixed;top:-70px;left:12px;z-index:200;padding:11px 16px;
+  border-radius:0 0 12px 12px;background:var(--gold);color:var(--navy);
+  font-weight:700;font-size:13px;transition:top .2s ease}
+.skip-link:focus{top:0;color:var(--navy)}
 .btn-pulse{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;
   background:var(--gold-2);box-shadow:0 0 0 2px var(--navy),0 0 8px var(--gold)}
 .btn-pulse[hidden]{display:none}
@@ -513,31 +522,12 @@ body.nav-open .scrim,body.mission-open .scrim{opacity:1;visibility:visible;point
 body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
   background:rgba(201,168,76,.12)}
 
-.tabbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;
-  grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;
-  background:rgba(9,20,38,.94);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
-  border-top:1px solid var(--line);
-  padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -10px 32px rgba(0,0,0,.35)}
-.tabbar-item{display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:4px;min-height:var(--tabbar-h);padding:8px 2px;color:var(--slate);font-size:10px;
-  font-weight:600;letter-spacing:.02em;position:relative;transition:color .2s ease}
-.tabbar-item svg{width:20px;height:20px}
-.tabbar-item::before{content:"";position:absolute;top:0;left:22%;right:22%;height:2px;
-  border-radius:0 0 3px 3px;background:transparent;transition:background .2s}
-.tabbar-item:hover{color:var(--white)}
-.tabbar-item.active{color:var(--gold-2)}
-.tabbar-item.active::before{background:var(--gold);box-shadow:0 0 10px rgba(201,168,76,.6)}
-.tabbar-item:active{transform:scale(.96)}
-
-/* ---------- Responsive ---------- */
 /* ==========================================================================
-   RESPONSIVE LAYOUT
-   Desktop  >= 1101px : three-column grid, collapsible sidebar,
-                        Agent Activity panel can be hidden for more width
-   Compact  <= 1100px : one column, off-canvas nav + telemetry drawers,
-                        persistent bottom tab bar
-   Phone    <= 700px  : compact type, 2-up KPIs, full-width form controls
-   Tiny     <= 380px  : final tightening
+   RESPONSIVE LAYOUT — no bottom bar, phone-first below 1100px
+   Desktop >=1101px : three-column grid, collapsible sidebar, telemetry toggle
+   Compact <=1100px : single column, labelled Menu button + off-canvas drawers
+   Phone   <=700px  : stacked tables, fluid charts, 16px inputs, 44px targets
+   Tiny    <=380px  : final tightening
    ========================================================================== */
 :where(button,a,input,select,textarea):focus-visible{
   outline:2px solid var(--gold-2);outline-offset:2px;border-radius:6px}
@@ -558,20 +548,27 @@ body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
   .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
-/* --- Compact: off-canvas drawers + bottom tab bar ------------------------ */
+/* --- Compact: off-canvas drawers, Menu button is the only navigation ------ */
 @media(max-width:1100px){
   .shell{--sb:0px;--ms:0px;grid-template-columns:minmax(0,1fr)}
   .shell.collapsed,.shell.mission-hidden{--sb:0px;--ms:0px}
   .shell.mission-hidden .mission{display:flex}
-  .main-wrap{padding-bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px))}
-  .tabbar{display:grid}
   body.nav-open,body.mission-open{overflow:hidden}
 
+  /* The labelled Menu button is the sole navigation entry point. */
+  .icon-btn{width:44px;height:44px;min-width:44px}
+  .icon-btn.menu-btn{width:auto;min-width:0;height:44px;padding:0 12px;gap:7px;
+    border-radius:12px;color:var(--gold-2);
+    border-color:rgba(201,168,76,.4);background:rgba(201,168,76,.1)}
+  .menu-btn svg{width:18px;height:18px}
+  .menu-label{display:inline}
+
   /* Left navigation drawer ------------------------------------------------ */
-  .sidebar{position:fixed;top:0;left:0;bottom:0;width:min(86vw,300px);
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:min(88vw,320px);
     height:100vh;height:100dvh;z-index:60;transform:translateX(-102%);
     transition:transform .3s cubic-bezier(.2,.8,.2,1);
-    box-shadow:16px 0 48px rgba(0,0,0,.55);border-right:1px solid rgba(201,168,76,.18)}
+    overscroll-behavior:contain;box-shadow:16px 0 48px rgba(0,0,0,.55);
+    border-right:1px solid rgba(201,168,76,.18)}
   body.nav-open .sidebar{transform:translateX(0)}
   .sidebar .brand{padding:22px 58px 24px 20px}
   .drawer-close{display:inline-flex}
@@ -586,12 +583,16 @@ body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
   .nav-label{display:block}
   .nav-item span,.nav-item em{display:inline}
   .sidebar-bottom{display:block}
+  .nav-item{min-height:48px;font-size:14px}
+  .nav-item svg{width:20px;height:20px}
+  .plan-card{white-space:normal}
 
   /* Right Agent Activity drawer ------------------------------------------- */
-  .mission{position:fixed;top:0;right:0;bottom:0;width:min(90vw,340px);
+  .mission{position:fixed;top:0;right:0;bottom:0;width:min(92vw,360px);
     height:100vh;height:100dvh;z-index:60;transform:translateX(102%);
     display:flex;transition:transform .3s cubic-bezier(.2,.8,.2,1);
-    box-shadow:-16px 0 48px rgba(0,0,0,.55);border-left:1px solid rgba(201,168,76,.18)}
+    overscroll-behavior:contain;box-shadow:-16px 0 48px rgba(0,0,0,.55);
+    border-left:1px solid rgba(201,168,76,.18)}
   body.mission-open .mission{transform:translateX(0)}
   .mission-head{display:flex;align-items:center;gap:10px;padding:18px 14px 16px}
   .mission-head>div{flex:1;min-width:0}
@@ -608,36 +609,48 @@ body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
   .chart-box{height:220px}.chart-box.tall{height:250px}.chart-box.short{height:180px}
   .toast-stack{left:12px;right:12px;top:70px;align-items:stretch}
   .toast{min-width:0;max-width:none;width:100%}
-  .chat-fab{right:16px;bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 16px)}
+  .chat-fab{right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
   .chat-dock{left:12px;right:12px;width:auto;
-    bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 12px);
+    bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
     height:min(72dvh,540px);max-height:calc(100dvh - 90px)}
+  .footer{padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))}
 }
 
-/* --- Phones -------------------------------------------------------------- */
+/* --- Phones: genuinely single-column, no horizontal scrolling ------------- */
 @media(max-width:700px){
-  .topbar{height:56px;padding:0 12px;gap:10px}
+  html{scroll-padding-top:64px}
+  .topbar{height:56px;padding:0 10px;gap:8px}
+  .icon-btn.menu-btn{padding:0 10px;gap:6px}
+  .menu-label{font-size:11px}
   .mobile-brand{display:flex}
   .crumb{display:none}
-  .top-actions{gap:7px}
-  .icon-btn{width:40px;height:40px}
+  .top-actions{gap:6px}
+  .icon-btn{width:44px;height:44px;min-width:44px}
+  .icon-btn.menu-btn{width:auto;min-width:0;height:44px}
   .icon-btn svg{width:18px;height:18px}
-  .btn-sm{padding:9px 11px}
-  .content{padding:18px 14px 32px}
-  .hero{padding:24px 18px 22px;border-radius:18px}
-  .hero h1{font-size:clamp(26px,7.6vw,34px)}
-  .hero-sub{font-size:12px;margin-bottom:20px}
+  .btn,.btn-sm{min-height:44px;padding:10px 14px}
+  .tab{min-height:44px}
+  .chip{min-height:44px;display:inline-flex;align-items:center}
+  .content{padding:16px 12px 30px;min-width:0}
+  .hero{padding:22px 16px 20px;border-radius:18px}
+  .hero h1{font-size:clamp(25px,7.2vw,32px)}
+  .hero-sub{font-size:12px;margin-bottom:18px}
   .composer{padding:12px}
   .composer-main{gap:9px}
   #queryInput{font-size:16px}              /* stops iOS auto-zoom on focus */
-  .composer-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-  .composer-row .field{min-width:0}
-  .composer-row .field select{width:100%;font-size:11px;padding:9px 24px 9px 8px}
-  .composer-row .btn{grid-column:1/-1;width:100%;margin-left:0}
-  .chips{gap:6px;margin-top:14px}.chip{font-size:10px;padding:6px 10px}
-  .g2,.g3,.g23,.g32{grid-template-columns:1fr}
-  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .card{padding:16px;border-radius:14px}
+  /* Every control is 16px / 44px tall, so iOS never zooms a phone on focus. */
+  select,input[type=text],input[type=password],textarea,
+  .chat-form input,.key-input-wrap input{font-size:16px;min-height:44px}
+  .composer-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+  .composer-row .field{flex:1 1 calc(50% - 4px);min-width:0}
+  .composer-row .field select{width:100%;font-size:16px;padding:10px 24px 10px 8px}
+  .composer-row .btn{flex:1 1 100%;width:100%;margin-left:0}
+  .filter-bar{padding:12px;gap:10px}
+  .filter-bar .field{flex:1 1 calc(50% - 5px);min-width:0;width:auto}
+  .filter-bar .btn{width:100%;margin-left:0;flex:1 1 100%}
+  .chips{gap:6px;margin-top:14px}.chip{font-size:11px;padding:7px 11px}
+  .g2,.g3,.g4,.g23,.g32{grid-template-columns:minmax(0,1fr)}
+  .card{padding:14px;border-radius:14px;min-width:0}
   .card-head{flex-wrap:wrap;gap:10px;margin-bottom:14px}
   .card-head h3{font-size:15px}.card-head h2{font-size:18px}
   .kpi .kpi-val{font-size:22px}.kpi .kpi-val.mono{font-size:20px}
@@ -645,60 +658,98 @@ body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
   .section-title{margin:24px 0 12px}.section-title h2{font-size:17px}
   .report-row{grid-template-columns:minmax(0,1fr);gap:10px;padding:12px}
   .report-row .rr-actions{justify-content:flex-start;flex-wrap:wrap}
-  .filter-bar{padding:12px;gap:10px}
-  .filter-bar .field{flex:1 1 120px;min-width:0}
-  .filter-bar .btn{width:100%;margin-left:0}
-  .tabs{margin-bottom:14px}.tab{padding:10px 12px;font-size:11px}
-  .md{font-size:12px}.md h1{font-size:19px}.md h2{font-size:16px}
-  .md table{font-size:11px}
+  .tabs{margin-bottom:14px;scroll-snap-type:x proximity;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{padding:10px 12px;font-size:12px;scroll-snap-align:start}
+  .md{font-size:13px;overflow-wrap:anywhere}
+  .md h1{font-size:19px}.md h2{font-size:16px}
+  .md table{font-size:11px;display:block;overflow-x:auto;max-width:100%}
   .md th,.md td{padding:8px 7px;white-space:normal;overflow-wrap:anywhere}
-  .vs-head{grid-template-columns:1fr 44px 1fr;gap:8px}
-  .vs-orb{width:42px;height:42px;font-size:14px}
-  .metric-row{grid-template-columns:1fr 78px 1fr;gap:8px}
-  .metric-val{font-size:13px}.metric-row .m-name{font-size:10px}
+
+  /* Tables become readable stacked cards instead of a sideways scroll. */
+  .tbl-wrap{overflow-x:visible;margin:0;padding:0}
+  .tbl,.tbl tbody{display:block;width:100%}
+  .tbl thead{display:none}
+  .tbl tbody tr{display:block;padding:10px 12px;margin-bottom:10px;
+    border:1px solid var(--line-2);border-radius:12px;
+    background:rgba(255,255,255,.018)}
+  .tbl tbody tr:last-child{margin-bottom:0}
+  .tbl td{display:block;padding:6px 0;border:0;text-align:left;min-width:0;
+    max-width:100%;overflow-wrap:anywhere}
+  .tbl td::before{content:attr(data-label);display:block;margin-bottom:2px;
+    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    font-weight:700;color:var(--slate);text-align:left}
+  .tbl td:not([data-label])::before,.tbl td[data-label=""]::before{display:none}
+  .tbl td.num{text-align:left;font-family:var(--f-mono)}
+  .tbl.no-head tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;gap:10px}
+  .tbl.no-head td{padding:4px 0}
+  .tbl.no-head td:first-child{font-size:11px;color:var(--muted);text-align:left}
+  .tbl.no-head td:last-child{text-align:right;justify-content:flex-end}
+
+  /* Long identifiers / URLs / model slugs must never push the page sideways. */
+  .mono,.saved-key,.slot-result,.or-name small,.rr-meta,.report-row .rr-title{
+    overflow-wrap:anywhere;word-break:break-word}
+  .saved-key{flex-direction:column;align-items:flex-start;gap:4px}
+  .slot-result{line-height:1.6}
+
+  .metric-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 10px}
+  .metric-row .m-name{grid-column:1/-1;grid-row:1;text-align:center;font-size:10px}
+  .metric-row>div:first-child{grid-column:1;grid-row:2}
+  .metric-row>div:last-child{grid-column:2;grid-row:2}
+  .metric-val{font-size:14px}.metric-val.b{text-align:right}
+  .vs-head{grid-template-columns:minmax(0,1fr);gap:8px}
+  .vs-head .field{width:100%}
+  .vs-orb{width:36px;height:36px;font-size:12px;margin:0 auto}
   .slot-grid{grid-template-columns:1fr}
-  .slot-actions .btn{min-width:0;flex:1 1 45%}
+  .slot-actions .btn{min-width:0;flex:1 1 100%}
   .info-strip{flex-direction:column;gap:8px;padding:14px}
-  .footer{flex-direction:column;text-align:center;gap:6px;padding:18px 14px}
+  .footer{flex-direction:column;text-align:center;gap:6px;padding:18px 12px;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
   .footer i{margin:0 3px}
-  .chat-fab{padding:11px 15px;font-size:11px}
-  .chat-dock{bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 8px)}
+  .chat-fab{padding:12px 16px;font-size:12px;min-height:44px}
+  .chat-dock{left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);
+    height:min(80dvh,560px);max-height:calc(100dvh - 72px)}
+  .chat-form input{font-size:16px}
   .toast-stack{top:64px;left:10px;right:10px}
-  .heat-cell{height:22px}
-  .heat-grid{min-width:480px}
+  .heat-grid{grid-template-columns:68px repeat(var(--heat-cols,8),minmax(0,1fr));
+    min-width:0;gap:3px}
+  .heat-cell{height:20px;border-radius:4px}
+  .heat-lbl{font-size:8px;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .chart-tooltip{max-width:calc(100vw - 48px);white-space:normal;font-size:10px;padding:7px 9px}
+  .or-row{grid-template-columns:20px minmax(0,1fr);row-gap:6px}
+  .or-row>.tiny,.or-row>.badge{grid-column:2;justify-self:start}
+  .or-summary .btn{margin-left:0;flex:1 1 100%}
 }
 
 /* --- Very small phones --------------------------------------------------- */
 @media(max-width:480px){
-  .new-report-btn{padding:0;width:40px;height:40px;min-width:40px;border-radius:12px}
+  .new-report-btn{padding:0;width:44px;height:44px;min-width:44px;border-radius:12px}
   .new-report-btn .btn-label{display:none}
   .new-report-btn svg{width:17px;height:17px}
   .mobile-brand{font-size:11px;letter-spacing:.1em}
   .hero-eyebrow{font-size:9px;letter-spacing:.16em}
 }
 @media(max-width:380px){
-  .content{padding:14px 10px 28px}
-  .card{padding:14px}
+  .content{padding:14px 10px 26px}
+  .card{padding:12px}
   .top-actions{gap:5px}
   .mobile-brand{display:none}
-  .crumb{display:flex;font-size:11px}
-  .crumb span,.crumb b{display:none}
-  .tabbar-item{font-size:9px}
-  .tabbar-item svg{width:18px;height:18px}
-  .composer-row{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .composer-row .field:last-of-type{grid-column:1/-1}
+  .crumb{display:none}
+  .menu-label{font-size:10px}
+  .composer-row .field{flex:1 1 100%}
+  .metric-val{font-size:13px}
 }
 
 /* --- Short landscape screens --------------------------------------------- */
 @media(max-height:560px) and (orientation:landscape){
-  :root{--tabbar-h:48px}
   .topbar{height:48px}
+  .icon-btn{width:44px;height:44px;min-width:44px}
+  .icon-btn.menu-btn{width:auto;min-width:0}
   .content{padding-top:14px}
   .hero{padding:18px}
   .hero h1{font-size:26px}
-  .tabbar-item{min-height:48px}
-  .tabbar-item svg{width:18px;height:18px}
+  .chart-box{height:180px}.chart-box.tall{height:200px}
 }
 
 /* --- Accessibility ------------------------------------------------------- */
@@ -722,8 +773,3 @@ body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
 .or-name{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ivory);min-width:0}
 .or-name small{font:10px var(--f-mono);color:var(--slate);overflow-wrap:anywhere}
 .or-body>.tiny{margin:12px 0 0;line-height:1.6}
-@media(max-width:700px){
-  .or-row{grid-template-columns:20px minmax(0,1fr);row-gap:6px}
-  .or-row>.tiny,.or-row>.badge{grid-column:2;justify-self:start}
-  .or-summary .btn{margin-left:0}
-}

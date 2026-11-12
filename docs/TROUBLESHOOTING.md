@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 85 tests should pass
+pytest -q                             # 88 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -223,12 +223,14 @@ curl -s https://YOUR-APP.onrender.com/api/health | python -m json.tool
 |---------|-----|
 | Only the ≡ button is visible / content looks off-screen | Hard-refresh — an older cached `app.css` has a three-column grid squeezed into a phone. Confirm `/static/app.css` contains `@media(max-width:1100px)`. |
 | ≡ button "does nothing" on a tablet | Below 1100px it opens the navigation **drawer** (off-canvas, from the left). Look for the dimmed backdrop; the button turns gold while open. On desktop it instead collapses the sidebar to a 72px rail. |
-| Sidebar disappeared entirely on a phone | Expected — use the ≡ button or the five-tab bottom bar. The sidebar is a drawer below 1100px. |
+| Sidebar disappeared entirely on a phone | Expected — tap the labelled **Menu** button. The sidebar is a drawer below 1100px; there is no bottom bar. |
 | Agent Activity panel is missing | Use the pulse button in the top bar: on desktop it toggles the panel, on tablets/phones it opens it as a right-hand drawer. |
 | Drawer will not close | Tap the backdrop, press `Escape`, use the ✕ inside the drawer, or pick a page. Opening one drawer always closes the other. |
-| Charts/heatmap cut off on a phone | They scroll horizontally inside their card; charts also reflow on resize and orientation change. |
-| Inputs zoom the whole page on iOS | Fixed — form inputs use 16px on phones. |
-| Bottom bar overlaps the footer | `main-wrap` reserves `var(--tabbar-h)` plus the iOS safe-area inset. |
+| Charts/heatmap cut off on a phone | Charts scale their gutters to the measured card width and reflow on resize / orientation change; the heatmap shrinks its label column and cell height to fit. Refresh if an older cached `app.css` is being served. |
+| Inputs zoom the whole page on iOS | Fixed — every input, select and textarea uses 16px / 44px on phones. |
+| Wide table forces sideways scrolling | On phones the table header is hidden and each row becomes a labelled stacked card; `decorateTables()` copies `<th>` text onto every cell. |
+| A bottom bar is still visible | The bottom navigation bar was removed entirely. Hard-refresh to drop a cached `app.css` / `app.js`; `grep -ri tabbar app/web` must return nothing. |
+| Footer hidden behind the iOS home indicator | The footer, chat dock, Ask button and toasts reserve `env(safe-area-inset-bottom)`; no extra bottom-bar padding remains. |
 
 Both frontends (the SPA and Streamlit) share the same breakpoints. Verify with
 `pytest -q tests/test_responsive_ui.py`.

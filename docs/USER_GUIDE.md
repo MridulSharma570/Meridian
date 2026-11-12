@@ -23,11 +23,13 @@ listing all seven agents with idle/working/done states. A small gold **Ask**
 bubble sits at the bottom right.
 
 **On tablets and phones (≤1100px):** the interface becomes a single, full-width
-column with a five-tab bar along the bottom (Home, History, Compare, Keys,
-Guide). The left sidebar and the Agent Activity panel slide in as drawers over a
-dimmed backdrop. Cards stack, KPIs stay two-up, the query composer and export
-buttons become full-width, charts and wide tables scroll horizontally, and all
-touch targets are at least 40px. Nothing is clipped or hidden off-screen. See
+column with **no bottom bar**. A labelled **Menu** button at the top left opens
+the navigation drawer; the Activity button opens the telemetry drawer. Both
+slide in over a dimmed backdrop. Cards stack in one column, wide tables reflow
+into labelled stacked rows, the heatmap shrinks to fit the screen, charts scale
+their gutters to the available width, and the composer / exports / actions go
+full-width. Every input is 16px (so iOS never zooms) and every touch target is
+at least 44px. Nothing is clipped or hidden off-screen. See
 [§11 Keyboard & micro-interactions](#11-keyboard--micro-interactions) for the
 two top-left controls.
 
@@ -216,13 +218,16 @@ Modelled claims are flagged ⚠️ by the Fact-Checker. Set `TAVILY_API_KEY`,
   Agent Activity panel to give charts more room (also remembered). On
   tablets/phones it slides the Agent Activity drawer in from the right. A small
   gold pulse on the button means a report is currently running.
-- **Bottom tab bar** (tablets/phones) switches views without opening the drawer;
-  its active tab always matches the current page.
+- **No bottom bar on phones/tablets** — all five destinations (Dashboard,
+  Report History, Compare Mode, API Keys, User Guide) live in the navigation
+  drawer, and the active one is highlighted there. The full screen stays
+  available for content and the footer.
 - `Tab` stays inside an open drawer; `Escape` closes it and returns focus to
   the button that opened it.
-- Hover any chart for a tooltip; click a legend item to hide/show a series.
-- Heatmap cells scale up on hover with their exact score; on phones the heatmap
-  scrolls horizontally instead of shrinking into illegibility.
+- Hover (or tap on a phone) any chart for a tooltip; click a legend item to
+  hide/show a series. Bar charts put the label above the bar on narrow screens.
+- Heatmap cells scale up on hover with their exact score; on phones the label
+  column narrows and the cells shrink to fit the viewport (no sideways scroll).
 - Cards fade/slide in on view change; buttons lift slightly on hover.
 - All layouts respect `prefers-reduced-motion` and iOS safe-area insets.
 

@@ -58,6 +58,25 @@ here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Phone-first layout, bottom bar removed
+- Removed the five-button bottom navigation bar completely (HTML, CSS, JS, docs and
+  tests). On phones the whole viewport is content; a labelled **Menu** button
+  in the top bar opens the off-canvas navigation drawer, which is now the only
+  navigation. Added a skip link, 48px drawer items and `touch-action`.
+- Tables reflow into stacked, labelled cards on phones: a `MutationObserver`
+  on `#view` copies `<th>` text onto each `<td>` as `data-label`. Headerless
+  label/value tables become two-column rows. No sideways table scrolling.
+- The heatmap derives its columns from `--heat-cols` and shrinks its label
+  gutter / cell height to fit the viewport. Line charts scale their gutter to
+  the measured container width; bar charts switch to a stacked label-over-bar
+  layout below 420px so long labels can never spill off a phone screen.
+- All phone grids are single-column, all controls are 16px font and >=44px
+  tall (no iOS auto-zoom), long IDs wrap, and footer / chat / toasts are
+  safe-area aware. The Streamlit theme drops its reserved bottom-bar space and
+  gains a 380px breakpoint.
+- Responsive regression tests now assert the bar can never return plus the
+  stacked-table, iOS-zoom, touch-target and fluid-chart contracts.
+
 ### Added — OpenRouter free-model auto-selection
 - `OpenRouter (Free)` now defaults to **Auto — best free model (live)** instead
   of a hard-coded, retired `:free` slug. A new `app/api/openrouter_auto.py`
@@ -90,15 +109,15 @@ here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ≥1800 / short landscape / reduced motion), plus iOS safe-area insets and
   visible focus rings.
 - Tablet/phone layout: full-width single column, off-canvas navigation and
-  Agent Activity drawers with a scrim, and a persistent five-tab bottom bar.
+  Agent Activity drawers with a scrim.
 - The menu button now has a real function everywhere: collapse/expand the
   sidebar on desktop (persisted), open/close the navigation drawer on small
   screens (Escape, backdrop, ✕, focus trap and focus restore).
 - New Activity button: hide/show the telemetry panel on desktop, open the
   telemetry drawer on small screens, with a live-pulse indicator.
-- Phone-friendly forms (16px inputs to stop iOS zoom, three-up selectors,
-  full-width actions), two-up KPIs, wrapping card headers, horizontal chart /
-  table / heatmap scrolling, and compact chat + toast + footer placement.
+- Phone-friendly forms (16px inputs to stop iOS zoom, fluid selectors,
+  full-width actions), wrapping card headers, fluid charts, and compact chat +
+  toast + footer placement.
 - Equivalent responsive CSS for the secondary Streamlit frontend.
 
 ### Fixed
