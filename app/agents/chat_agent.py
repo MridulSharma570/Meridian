@@ -5,7 +5,8 @@ import re
 from typing import Any, Dict, List
 
 from app.agents.base import BaseAgent, compact
-from app.api.llm_router import call_llm, is_configured
+from app.api import answer_policy
+from app.api.llm_router import call_llm, effective_slot, is_configured
 from app.config import settings
 from app.database import queries
 
@@ -27,8 +28,8 @@ class ChatAgent(BaseAgent):
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
         q = ctx.get("question", "")
-        # Chat uses the LLM path when available (see answer()), but always keeps a
-        # fully grounded local answer as a fallback.
+        # Sample mode only: ChatAgent.answer() is the production entry point and
+        # refuses to use this template when no provider API is configured.
         return {"answer": self._local_answer(ctx, q), "suggestions": self.SUGGESTIONS}
 
     def llm_prompt(self, ctx: Dict[str, Any]) -> str:
@@ -130,38 +131,85 @@ class ChatAgent(BaseAgent):
         )
 
     def answer(self, ctx: Dict[str, Any], question: str, report_id: str = "") -> Dict[str, Any]:
-        """Grounded answer with an optional LLM upgrade, always returning a result."""
+        """Grounded answer. In verified mode the LLM is the ONLY answer source."""
         ctx = dict(ctx)
         ctx["question"] = question
-        answer = self._local_answer(ctx, question)
-        provider = "Meridian Local Engine"
-        model = "grounded-context-v1"
-        if is_configured("chat"):
+        answer = ""
+        provider, model = "Meridian Local Engine", "grounded-context-v1"
+
+        if answer_policy.strict_mode():
+            answer_policy.require_api("chat answer")
+            sources = (ctx.get("dataset", {}) or {}).get("verified_sources") or []
+            prompt = (
+                "You are Meridian's follow-up analyst. Answer the QUESTION using "
+                "ONLY the REPORT CONTEXT and VERIFIED SOURCES supplied. Cite real "
+                "source ids like [L01] where they genuinely apply. Never invent a "
+                "figure, publisher, URL or citation. If the context cannot answer "
+                "the question, say exactly what is missing instead of guessing. "
+                "Chart series in the context are unverified placeholders: never "
+                "quote their numbers as measurements. Max 180 words.\n\n"
+                f"QUESTION: {question}\n\n"
+                "VERIFIED SOURCES:\n" + compact(sources, 3000) + "\n\n"
+                "REPORT CONTEXT:\n" + compact({
+                    "query": ctx.get("query"),
+                    "company": (ctx.get("dataset", {}) or {}).get("company"),
+                    "region": ctx.get("region"),
+                    "analyst_summary": (ctx.get("analyst", {}) or {}).get("summary"),
+                    "writer_markdown": ((ctx.get("writer", {}) or {}).get("markdown")
+                                        or "")[:3500],
+                }, 5200)
+            )
             try:
-                prompt = (
-                    "You are Meridian's follow-up analyst. Answer using ONLY the supplied "
-                    "report context. Be specific, cite reference ids like [S01] where relevant, "
-                    "and say so if the context cannot answer. Max 180 words.\n\n"
-                    f"QUESTION: {question}\n\nCONTEXT:\n" + compact({
-                        "dataset": {k: ctx.get("dataset", {}).get(k) for k in
-                                    ("company", "sector", "region", "market_size_usd_b",
-                                     "cagr_pct", "competitors", "segments", "macro",
-                                     "sentiment", "risk_events")},
-                        "analyst_summary": ctx.get("analyst", {}).get("summary"),
-                        "forecast": {k: ctx.get("forecast", {}).get(k) for k in
-                                     ("base_end", "optimistic_end", "pessimistic_end",
-                                      "expected_growth_pct")},
-                        "sources": ctx.get("researcher", {}).get("sources", [])[:8],
-                        "local_draft": answer,
-                    }, 5200)
-                )
-                res = call_llm("chat", "You are a precise, evidence-bound research analyst.",
-                               prompt, max_tokens=420, temperature=0.35,
+                res = call_llm(effective_slot("chat"),
+                               "You are a precise, evidence-bound research analyst.",
+                               prompt, max_tokens=420, temperature=0.3,
                                timeout=settings.agent_timeout_s)
-                if len(res["text"]) > 40:
-                    answer, provider, model = res["text"], res["provider"], res["model"]
-            except Exception:
-                pass  # local answer stands — chat never errors out
+            except Exception as exc:
+                raise answer_policy.AnswerUnavailable(
+                    f"The configured provider could not answer this question: {exc}",
+                    "Check the key, model and quota in Settings → API Keys.",
+                    "provider_failed") from exc
+            answer = (res.get("text") or "").strip()
+            if len(answer) < 20:
+                raise answer_policy.AnswerUnavailable(
+                    "The provider returned an empty chat answer; Meridian will "
+                    "not substitute a canned template.",
+                    "Try again or pick a different model in Settings → API Keys.",
+                    "unusable_output")
+            allowed = {str(x.get("id")) for x in sources if isinstance(x, dict)}
+            answer = re.sub(r"\[([A-Z]\d{2})\]",
+                            lambda m: m.group(0) if m.group(1) in allowed else "[unverified]",
+                            answer)
+            provider, model = res["provider"], res["model"]
+        else:
+            answer = self._local_answer(ctx, question)
+            if is_configured("chat"):
+                try:
+                    prompt = (
+                        "You are Meridian's follow-up analyst. Answer using ONLY the supplied "
+                        "report context. Be specific, cite reference ids like [S01] where relevant, "
+                        "and say so if the context cannot answer. Max 180 words.\n\n"
+                        f"QUESTION: {question}\n\nCONTEXT:\n" + compact({
+                            "dataset": {k: ctx.get("dataset", {}).get(k) for k in
+                                        ("company", "sector", "region", "market_size_usd_b",
+                                         "cagr_pct", "competitors", "segments", "macro",
+                                         "sentiment", "risk_events")},
+                            "analyst_summary": ctx.get("analyst", {}).get("summary"),
+                            "forecast": {k: ctx.get("forecast", {}).get(k) for k in
+                                         ("base_end", "optimistic_end", "pessimistic_end",
+                                          "expected_growth_pct")},
+                            "sources": ctx.get("researcher", {}).get("sources", [])[:8],
+                            "local_draft": answer,
+                        }, 5200)
+                    )
+                    res = call_llm("chat", "You are a precise, evidence-bound research analyst.",
+                                   prompt, max_tokens=420, temperature=0.35,
+                                   timeout=settings.agent_timeout_s)
+                    if len(res["text"]) > 40:
+                        answer, provider, model = res["text"], res["provider"], res["model"]
+                except Exception:
+                    pass  # sample mode only
+
         if report_id:
             queries.add_chat_message(report_id, "user", question)
             queries.add_chat_message(report_id, "assistant", answer)

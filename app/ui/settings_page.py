@@ -11,9 +11,18 @@ from app.ui.theme import hero
 def render() -> None:
     hero("API Keys & Providers",
          "Six independent, Fernet-encrypted key slots. Use one key everywhere or mix free "
-         "and paid providers. No key is required — Meridian runs fully on its local engine.",
+         "and paid providers. At least one active provider key is required before "
+         "Meridian will generate reports, chat answers, translations or comparisons.",
          "SECURE CONFIGURATION")
     payload = services.settings_payload()
+    ready = payload.get("readiness", {})
+    if ready.get("sample_mode"):
+        st.warning("SAMPLE MODE: offline deterministic data is enabled. Nothing shown "
+                   "elsewhere should be treated as verified research.")
+    elif not ready.get("answers_enabled"):
+        st.error(f"{ready.get('message', 'Answers are disabled.')} {ready.get('hint', '')}")
+    else:
+        st.success(ready.get("message", "Configured API answers are enabled."))
     st.info(f"🔐 {payload['encryption']} · only masked keys are ever shown in the UI · "
             f"{payload['configured_count']} / {len(payload['slots'])} slots configured")
 

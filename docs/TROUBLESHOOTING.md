@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 88 tests should pass
+pytest -q                             # 101 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -72,8 +72,9 @@ Check `GET /api/reports/{id}/status` and the server console. Causes:
 - an agent's provider is hanging (default budget 45 s),
 - a live connector is slow (collection budget is 6 s).
 
-Set `MERIDIAN_LIVE_DATA=false` and/or lower `MERIDIAN_AGENT_TIMEOUT=15`,
-then restart. The local engine always completes in under a second.
+Check whether the job actually failed with a provider/evidence error. In
+production mode Meridian fails closed; it does not complete from a local
+template. Lower `MERIDIAN_AGENT_TIMEOUT=15` only to fail faster.
 
 ### `Report failed: ...`
 Read `report.error_message` and the `job_failed` SSE event. The pipeline is
@@ -85,11 +86,13 @@ The report's `researcher_output.dataset` is missing. Regenerate the report, or
 open a different one. Filtering with an unsupported region/period falls back
 safely to Global/3Y.
 
-### Figures look "made up"
-They are model-generated when no live feeds are available — that is by design
-and is labelled `SIMULATED` in the badge, the report and the fact-check tab.
-Add `TAVILY_API_KEY` / `NEWS_API_KEY` and LLM keys to move to `HYBRID`/`LIVE`.
-Always verify ⚠️ flagged claims against primary sources before publishing.
+### "API key required" / no answer is generated
+This is the intended production behaviour. Save at least one active provider
+key in Settings → API Keys. Meridian no longer creates market sizes, SWOTs,
+forecasts, citations or chat answers from a deterministic template. If a key
+exists but reports still fail, check live evidence: enable `MERIDIAN_LIVE_DATA`
+or configure `TAVILY_API_KEY` / `NEWS_API_KEY`. Sample output is available only
+with explicit `MERIDIAN_SAMPLE_MODE=true` and is labelled SAMPLE.
 
 ### Agent Activity panel never updates
 SSE is being buffered. In Nginx add `proxy_buffering off;` and
@@ -102,7 +105,7 @@ blocks SSE entirely, the panel still resyncs via `/status` polling every 4 s.
 
 | Error | Meaning / fix |
 |-------|---------------|
-| `Enter an API key first` | The field was empty. Paste a key — or leave the slot unconfigured and use the local engine. |
+| `Enter an API key first` | The field was empty. Paste a key; unconfigured slots can borrow another active provider, but with none active answers stay disabled. |
 | `Unknown agent slot` | Only `researcher, analyst, writer, chat, forecast, factchecker, translator` are valid. |
 | `Unknown provider` | Choose from the dropdown; provider ids are internal (e.g. `openrouter_free`). |
 | `No key saved in this slot` | Press **Save key** before **Test connection**. |
@@ -110,10 +113,10 @@ blocks SSE entirely, the panel still resyncs via `/status` polling every 4 s.
 | `HTTP 429` | Rate limit / exhausted quota; wait or switch to a free provider. On an OpenRouter auto slot the next free model is tried automatically. |
 | `HTTP 404 … this free model was retired` | OpenRouter removed a `:free` slug. Auto mode refreshes the catalogue and cools that model down for five minutes. Press **Refresh** in the Settings auto-selection panel to force a re-fetch; pin a specific model only if you need reproducibility. |
 | `No free models found` / `OFFLINE FALLBACK` | The public catalogue could not be reached (or it returned no free chat models). Meridian falls back to OpenRouter's own `openrouter/free` router — still zero cost and still current. Check `MERIDIAN_OPENROUTER_CATALOG_TIMEOUT` and outbound DNS. |
-| `returned unusable output` on an auto slot | The ranked model did not support `response_format`. Meridian only sends JSON mode when the live model declares structured-output support, then repairs output with the local engine. |
-| `Could not reach <provider>` | Sandbox/VPN/firewall blocks the host. Meridian already used the local engine — no report is lost. |
+| `returned unusable output` on an auto slot | The ranked model did not support `response_format`. Meridian only sends JSON mode when the live model declares structured-output support; otherwise the step fails instead of using a template. |
+| `Could not reach <provider>` | Sandbox/VPN/firewall blocks the host. No answer was generated; fix connectivity or switch provider. |
 | `timed out after 45s` | Lower `MERIDIAN_AGENT_TIMEOUT` or use Groq/Cerebras for speed. |
-| `returned unusable output` | The model ignored JSON mode. Meridian repaired what it could and kept the local analysis. |
+| `returned unusable output` | The model ignored JSON mode. Meridian refused to publish a substitute answer. |
 | `Stored credential could not be decrypted` | The Fernet key changed (e.g. `data/` was reset). Re-enter the key in Settings. |
 | Keys disappear after restart | `MERIDIAN_DATA_DIR` points at a temporary path; mount a persistent volume. |
 
@@ -166,7 +169,7 @@ to silence them.
 ### Reset everything
 ```bash
 rm -rf data/meridian.db* data/.fernet_key data/exports/*
-python run.py     # recreates schema, key and a fresh demo report
+python run.py     # recreates schema and encryption key; configure a provider key next
 ```
 ⚠️ This deletes all saved reports and forces you to re-enter API keys.
 

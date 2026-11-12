@@ -51,7 +51,7 @@ services:
         value: /app/data
       - key: MERIDIAN_EXPORT_DIR
         value: /app/data/exports
-      # Warm-up (schema + demo report) runs AFTER the port is listening so
+      # Warm-up (schema only; no sample report) runs AFTER the port is listening so
       # Render's port scan / health check never times out.
       - key: MERIDIAN_BACKGROUND_BOOTSTRAP
         value: "true"
@@ -72,7 +72,13 @@ services:
         sync: false
       - key: MERIDIAN_SELF_PING_INTERVAL
         value: "600"
-      # Optional live data keys (leave unset for the local analytical engine).
+      # Answer policy: never generate from templates in production.
+      - key: MERIDIAN_SAMPLE_MODE
+        value: "false"
+      - key: MERIDIAN_REQUIRE_LIVE_EVIDENCE
+        value: "true"
+      # Optional live data keys. Provider LLM keys are saved in Settings; reports
+      # are refused if no provider key/live evidence is available.
       - key: TAVILY_API_KEY
         sync: false
       - key: NEWS_API_KEY

@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any, Dict, List
 
 from app.agents.base import BaseAgent, compact
+from app.api import answer_policy
 
 
 def _add_months(d: date, n: int) -> str:
@@ -18,8 +19,11 @@ class ForecastAgent(BaseAgent):
     slot = "forecast"
     icon = "📈"
     description = "Builds a 12-month forecast with confidence bands"
+    verified_fields = ("method", "note", "drivers", "narratives", "scenarios")
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        if answer_policy.strict_mode():
+            return self._verified_scaffold()
         d = ctx.get("dataset", {})
         hist = d.get("history", [])
         cagr = float(d.get("forecast_growth_pct", d.get("cagr_pct", 10))) / 100.0
@@ -63,6 +67,24 @@ class ForecastAgent(BaseAgent):
                  "narrative": "Pricing pressure and macro tightening compress demand."},
             ],
             "note": "Projections are model estimates, not investment advice.",
+        }
+
+    @staticmethod
+    def _verified_scaffold() -> Dict[str, Any]:
+        na = "Not available — a forecast needs a verified baseline, which no source supplied."
+        today = date.today()
+        rows = [{"month": _add_months(today, i), "base": 0.0, "optimistic": 0.0,
+                 "pessimistic": 0.0, "confidence": 0.0} for i in range(1, 13)]
+        return {
+            "series": rows, "horizon_months": 12, "base_end": 0.0,
+            "optimistic_end": 0.0, "pessimistic_end": 0.0,
+            "expected_growth_pct": 0.0, "upside_pct": 0.0, "downside_pct": 0.0,
+            "drivers": [na], "method": na,
+            "scenarios": [{"name": n, "value": 0.0, "probability": "not available",
+                           "narrative": na}
+                          for n in ("Base", "Optimistic", "Pessimistic")],
+            "note": "No projection was fabricated. Charts show placeholders only.",
+            "unverified_metrics": True,
         }
 
     def llm_prompt(self, ctx: Dict[str, Any]) -> str:

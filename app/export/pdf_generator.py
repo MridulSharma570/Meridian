@@ -175,7 +175,7 @@ def generate_pdf(report: Dict[str, Any], out_path: str | Path) -> str:
          f"{d.get('cagr_pct', 0):.1f}%"],
         ["Sources", str(len(d.get("sources", []))), "Reliability",
          f"{fc.get('reliability_score', 0)}/100"],
-        ["Data mode", str(d.get("data_mode", "simulated")).title(), "Generated",
+        ["Data mode", str(d.get("data_mode", "unverified")).title(), "Generated",
          str(d.get("as_of", ""))],
     ], st, [42 * mm, 44 * mm, 42 * mm, 44 * mm]))
     story.append(Spacer(1, 8))

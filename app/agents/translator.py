@@ -1,9 +1,8 @@
 """Translator agent — full-report localisation with structure preservation.
 
-With a configured LLM slot, the entire markdown is translated by the model.
-Without one, Meridian applies a curated phrase lexicon (headings, labels and
-section vocabulary) plus a fully localised executive summary in 14 languages,
-and clearly labels the result as a structural translation.
+In verified mode the entire markdown is translated by the configured LLM; a
+failed provider call is an error, never a pseudo-translation. The curated
+phrase lexicon remains only for explicitly labelled offline sample mode.
 """
 from __future__ import annotations
 
@@ -11,7 +10,8 @@ import re
 from typing import Any, Dict, List, Tuple
 
 from app.agents.base import BaseAgent
-from app.api.llm_router import call_llm, is_configured
+from app.api import answer_policy
+from app.api.llm_router import call_llm, effective_slot, is_configured
 from app.config import SUPPORTED_LANGUAGES, settings
 from app.database import queries
 
@@ -210,11 +210,40 @@ class TranslatorAgent(BaseAgent):
 
     def translate(self, markdown: str, target: str, ctx: Dict[str, Any],
                   report_id: str = "") -> Dict[str, Any]:
-        """Translate a full report. Always returns usable text."""
+        """Translate a full report; verified mode requires a real provider."""
         target = target if target in LANG_NAMES else "en"
         if target == "en":
             return {"language": "en", "native": "English", "content": markdown,
                     "method": "original", "note": ""}
+        if answer_policy.strict_mode():
+            answer_policy.require_api(f"{LANG_NAMES[target]} translation")
+            try:
+                res = call_llm(
+                    effective_slot("translator"),
+                    "You are a professional financial translator. Translate the report into "
+                    f"{LANG_NAMES[target]}. Preserve ALL markdown syntax, tables, numbers, "
+                    "reference ids like [L01], URLs and section structure. Output only the "
+                    "translated markdown, no commentary.",
+                    markdown[:9000], max_tokens=4096, temperature=0.15,
+                    timeout=max(settings.agent_timeout_s, 60),
+                )
+            except Exception as exc:
+                raise answer_policy.AnswerUnavailable(
+                    f"The configured provider could not translate the report: {exc}",
+                    "Check the key, model and quota in Settings → API Keys.",
+                    "provider_failed") from exc
+            content = (res.get("text") or "").strip()
+            if len(content) < 100:
+                raise answer_policy.AnswerUnavailable(
+                    "The provider returned an unusable translation; Meridian "
+                    "will not substitute a word-swapped pseudo-translation.",
+                    "Try a model with a larger output limit in Settings → API Keys.",
+                    "unusable_output")
+            if report_id:
+                queries.save_translation(report_id, "en", target, content)
+            return {"language": target, "native": LANG_NAMES[target],
+                    "content": content, "method": f"llm ({res['provider']})",
+                    "note": "Full neural translation; markdown structure preserved."}
         d = ctx.get("dataset", {})
         tpl = SUMMARY_TEMPLATES.get(target, SUMMARY_TEMPLATES["en"])
         summary = tpl.format(

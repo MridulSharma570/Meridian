@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.agents.base import BaseAgent, compact
+from app.api import answer_policy
 from app.data_sources.collector import collect_market_data
 from app.data_sources.demo_data import split_comparison
 
@@ -13,6 +14,7 @@ class ResearcherAgent(BaseAgent):
     slot = "researcher"
     icon = "🔍"
     description = "Collects live market signals, financials, news and verified sources"
+    verified_fields = ("signals", "source_notes", "data_gaps")
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
         query = ctx.get("query", "")
@@ -20,14 +22,32 @@ class ResearcherAgent(BaseAgent):
         period = ctx.get("period", "3Y")
         dataset = collect_market_data(query, region, period)
         ctx["dataset"] = dataset  # shared downstream state
+        strict = answer_policy.strict_mode()
+        if strict:
+            answer_policy.require_evidence(dataset)
         comparison = split_comparison(query)
+        sources = dataset.get("verified_sources") or [] if strict else dataset["sources"]
+        signals = [
+            f"Research query: {query} ({region}, {period}).",
+            f"{len(sources)} live source(s) retrieved from "
+            f"{', '.join(k for k, v in dataset.get('connectors', {}).items() if v == 'live') or 'no live connectors'}.",
+            "Only claims supported by these sources are treated as evidence; "
+            "unsupported metrics are reported as not available.",
+        ] if strict else [
+                f"{dataset['sector']} valued at ${dataset['market_size_usd_b']:.1f}B in {region}",
+                f"Trailing CAGR of {dataset['cagr_pct']:.1f}% across {period}",
+                f"{len(dataset['competitors'])} tracked competitors; leader holds "
+                f"{dataset['competitors'][0]['share']:.1f}% share",
+                f"{len(dataset['news'])} recent news items, "
+                f"{len(dataset['sources'])} citable sources",
+            ]
         return {
             "query": query, "company": dataset["company"], "sector": dataset["sector"],
             "region": region, "period": period, "as_of": dataset["as_of"],
             "dataset": dataset,
-            "sources": dataset["sources"],
-            "source_count": len(dataset["sources"]),
-            "headlines": dataset["news"],
+            "sources": list(sources),
+            "source_count": len(sources),
+            "headlines": dataset["news"][:10],
             "statistics": {
                 "market_size_usd_b": dataset["market_size_usd_b"],
                 "cagr_pct": dataset["cagr_pct"],
@@ -37,16 +57,12 @@ class ResearcherAgent(BaseAgent):
                 "quarters": dataset["quarters"],
             },
             "sentiment": dataset["sentiment"],
-            "signals": [
-                f"{dataset['sector']} valued at ${dataset['market_size_usd_b']:.1f}B in {region}",
-                f"Trailing CAGR of {dataset['cagr_pct']:.1f}% across {period}",
-                f"{len(dataset['competitors'])} tracked competitors; leader holds "
-                f"{dataset['competitors'][0]['share']:.1f}% share",
-                f"{len(dataset['news'])} recent news items, "
-                f"{len(dataset['sources'])} citable sources",
-            ],
+            "signals": signals,
             "comparison_request": list(comparison) if comparison else None,
             "data_mode": dataset["data_mode"],
+            "verified": dataset.get("verified", False),
+            "verified_sources": list(sources),
+            "unverified_metrics": dataset.get("unverified_metrics", False),
             "connectors": dataset.get("connectors", {}),
             "confidence_note": dataset["confidence_note"],
         }

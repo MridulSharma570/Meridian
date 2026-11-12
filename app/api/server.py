@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app import keepalive, services
 from app.agents.chat_agent import ChatAgent
+from app.api.answer_policy import AnswerUnavailable, readiness, sample_mode
 from app.agents.orchestrator import AGENT_META, PIPELINE
 from app.api.providers import list_providers
 from app.config import SUPPORTED_LANGUAGES, WEB_DIR, settings
@@ -80,6 +81,12 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"], expose_headers=["*"],
 )
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+
+@app.exception_handler(AnswerUnavailable)
+async def answer_unavailable(request: Request, exc: AnswerUnavailable):
+    """Never fabricate: return an actionable, structured 409 to the client."""
+    return JSONResponse(status_code=exc.status_code, content=exc.as_dict())
 
 
 @app.exception_handler(Exception)
@@ -177,7 +184,8 @@ def health(response: Response):
             "platform": settings.platform, "port": settings.port,
             "warming_up": not state["ready"],
             "keepalive": keepalive.keepalive_status(),
-            "demo_mode": settings.demo_mode}
+            "demo_mode": sample_mode(),
+            "readiness": readiness()}
 
 
 @app.get("/api/bootstrap", tags=["System"])
@@ -188,13 +196,20 @@ def bootstrap():
         "warming_up": not services.startup_state()["ready"],
         "app": settings.app_name, "tagline": settings.tagline,
         "version": settings.version, "developer": settings.developer,
-        "demo_mode": settings.demo_mode,
+        "demo_mode": sample_mode(),
+        "readiness": readiness(),
         "signature_trio": list(settings.signature_trio),
         "stats": services.overview_stats(),
         "settings": services.settings_payload(),
         "agents": [{"slot": k, **v} for k, v in AGENT_META.items()],
         "pipeline": PIPELINE,
     }
+
+
+@app.get("/api/readiness", tags=["System"])
+def api_readiness():
+    """Is an answer allowed right now? Consumed by both frontends on load."""
+    return readiness()
 
 
 @app.get("/api/stats", tags=["System"])

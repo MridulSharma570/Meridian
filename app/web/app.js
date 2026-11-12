@@ -33,9 +33,30 @@ async function api(path, opts = {}) {
   catch (e) { throw new Error('Cannot reach the Meridian engine. Check that the server is running.'); }
   const ct = res.headers.get('content-type') || '';
   const data = ct.includes('json') ? await res.json().catch(() => ({})) : await res.text();
-  if (!res.ok) throw new Error((data && (data.detail || data.error)) || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const detail = data && (data.message || data.detail || data.error);
+    const hint = data && data.hint;
+    throw new Error(hint && detail ? `${detail} ${hint}` : (detail || `Request failed (${res.status})`));
+  }
   return data;
 }
+function readiness() { return S.settings?.readiness || S.boot?.readiness || null; }
+function answersEnabled() {
+  const r = readiness();
+  return !!r && r.answers_enabled;
+}
+function answerGateHtml() {
+  const r = readiness();
+  if (!r || (!r.sample_mode && !r.reason && r.llm_configured)) return '';
+  const sample = !!r.sample_mode;
+  const title = sample ? 'Sample mode — not real research'
+    : 'API key required — answers are disabled';
+  return `<div class="info-strip answer-gate" role="alert" style="margin-bottom:20px">${icon(sample ? 'shield' : 'key')}<div>
+    <b>${title}.</b> ${esc(r.message || '')} ${esc(r.hint || '')}
+    <div style="margin-top:10px"><button class="btn btn-gold btn-sm" data-action="nav" data-view="settings">${icon('key')} Open Settings → API Keys</button></div>
+  </div></div>`;
+}
+
 function toast(msg, kind = 'info', ms = 4200) {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
@@ -497,7 +518,12 @@ function renderMission() {
   });
   $('#missionBody').innerHTML = html;
   $('#missionKeys').textContent = `${S.settings?.configured_count || 0} / 7`;
-  $('#missionDataMode').textContent = S.dashboard?.dataset?.data_mode || (S.boot?.demo_mode ? 'simulated' : '—');
+  const ready = readiness();
+  const pill = $('.live-pill span');
+  if (pill) pill.textContent = ready?.sample_mode ? 'SAMPLE MODE'
+    : ready?.llm_configured ? 'API CONFIGURED' : 'API KEY REQUIRED';
+  $('#missionDataMode').textContent = S.dashboard?.dataset?.data_mode ||
+    (ready?.sample_mode ? 'sample' : ready?.llm_configured ? 'verified' : 'disabled');
 }
 function connectEvents(id) {
   if (S.eventSource) { S.eventSource.close(); S.eventSource = null; }
@@ -518,7 +544,7 @@ function connectEvents(id) {
         refreshChrome(); return;
       } else if (e.type === 'job_failed') {
         S.jobStatus = 'failed'; renderMission();
-        toast(`Report failed: ${e.error}`, 'err', 8000);
+        toast(`Report failed: ${e.error}${e.hint ? ` ${e.hint}` : ''}`, 'err', 8000);
         S.eventSource?.close(); return;
       }
       renderMission();
@@ -534,7 +560,9 @@ async function renderDashboard() {
   const ds = S.dashboard?.dataset;
   const suggestions = ['Indian electric vehicle market 2026', 'Global AI platforms competitive landscape',
     'Fintech payments in India', 'Semiconductor supply chain outlook', 'Renewable energy in Europe'];
-  let html = `
+  const gate = answerGateHtml();
+  const canAnswer = answersEnabled();
+  let html = `${gate}
   <div class="hero">
     <div class="hero-eyebrow">Multi-agent market intelligence</div>
     <h1>One query.<br><span>The entire market landscape.</span></h1>
@@ -542,16 +570,16 @@ async function renderDashboard() {
        write, forecast and fact-check a board-ready report — with live charts and instant exports.</p>
     <div class="composer">
       <div class="composer-main">${icon('search', 'search-ico')}
-        <input id="queryInput" type="text" maxlength="600" placeholder="e.g. Indian electric vehicle market 2026 — Tesla vs BYD" />
+        <input id="queryInput" type="text" maxlength="600" placeholder="e.g. Indian electric vehicle market 2026 — Tesla vs BYD" ${canAnswer ? '' : 'disabled'} />
       </div>
       <div class="composer-row">
-        <div class="field"><label>Region</label><select id="regionSel">${(S.settings?.regions || ['Global']).map(r => `<option>${esc(r)}</option>`).join('')}</select></div>
-        <div class="field"><label>Period</label><select id="periodSel">${(S.settings?.periods || ['3Y']).map(p => `<option ${p === '3Y' ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
-        <div class="field"><label>Language</label><select id="langSel">${(S.settings?.languages || [{code:'en',native:'English'}]).map(l => `<option value="${l.code}" ${l.code === 'en' ? 'selected' : ''}>${esc(l.native)}</option>`).join('')}</select></div>
-        <button class="btn btn-gold" data-action="generate">${icon('spark')} Generate Intelligence</button>
+        <div class="field"><label>Region</label><select id="regionSel" ${canAnswer ? '' : 'disabled'}>${(S.settings?.regions || ['Global']).map(r => `<option>${esc(r)}</option>`).join('')}</select></div>
+        <div class="field"><label>Period</label><select id="periodSel" ${canAnswer ? '' : 'disabled'}>${(S.settings?.periods || ['3Y']).map(p => `<option ${p === '3Y' ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
+        <div class="field"><label>Language</label><select id="langSel" ${canAnswer ? '' : 'disabled'}>${(S.settings?.languages || [{code:'en',native:'English'}]).map(l => `<option value="${l.code}" ${l.code === 'en' ? 'selected' : ''}>${esc(l.native)}</option>`).join('')}</select></div>
+        <button class="btn btn-gold" data-action="generate" ${canAnswer ? '' : 'disabled'}>${icon('spark')} Generate Intelligence</button>
       </div>
     </div>
-    <div class="chips">${suggestions.map(s => `<button class="chip" data-action="suggest" data-q="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+    <div class="chips">${suggestions.map(sug => `<button class="chip" data-action="suggest" data-q="${esc(sug)}" ${canAnswer ? '' : 'disabled'}>${esc(sug)}</button>`).join('')}</div>
   </div>
   <div class="grid g4" style="margin-bottom:8px">
     ${kpi('Reports generated', `<span class="mono">${fmtInt(stats.total_reports || 0)}</span>`, `${fmtInt(stats.completed || 0)} completed successfully`, 'file', true)}
@@ -571,7 +599,7 @@ async function renderDashboard() {
   <div class="grid g23" style="margin-bottom:8px">
     ${card('Recent reports', 'Search, reopen, export or compare',
       reports.length ? reports.map(r => reportRow(r)).join('') :
-      `<div class="empty">${icon('file')}<h3>No reports yet</h3><p class="small">Use the composer above — your first report takes seconds.</p></div>`,
+      `<div class="empty">${icon('file')}<h3>No reports yet</h3><p class="small">${canAnswer ? 'Use the composer above — your first report takes seconds.' : 'Connect a provider API key in Settings before generating a report.'}</p></div>`,
       `<button class="btn btn-ghost btn-sm" data-action="nav" data-view="history">${icon('clock')} History</button>`)}
     ${card('How Meridian works', 'A seven-stage autonomous pipeline', `
       <div class="grid" style="gap:14px">
@@ -604,7 +632,7 @@ async function renderDashboard() {
       `<span><i style="background:${PALETTE[i % PALETTE.length]}"></i>${esc(c.name)} · ${fmt(c.share, 1)}%</span>`).join('');
   } else {
     registerChart('dashHistory', lineChart({labels:['2021','2022','2023','2024','2025'],
-      series:[{name:'Market size', values:[62,74,89,104,126], color:'#C9A84C', area:true}], unit:'B', fmtY:v=>fmt(v,0)}));
+      series:[{name:'Market size', values:[0,0,0,0,0], color:'#C9A84C', area:true}], unit:'B', fmtY:v=>fmt(v,0)}));
     registerChart('dashShare', donutChart([{label:'Awaiting report', value:100, color:'#8C7231'}]));
   }
   renderCharts();
@@ -660,7 +688,12 @@ async function loadReport(id, keepTab = true) {
     S.reportId = id;
     if (!keepTab) S.tab = 'overview';
     renderReport();
-  } catch (e) { toast(e.message, 'err'); }
+  } catch (e) {
+    toast(e.message, 'err');
+    $('#view').innerHTML = `<div class="card empty">${icon('key')}<h3>Verified report unavailable</h3>
+      <p class="small">${esc(e.message)}</p>
+      <button class="btn btn-gold btn-sm" data-action="nav" data-view="settings">${icon('key')} Open Settings</button></div>`;
+  }
 }
 async function renderReport() {
   const d = S.dashboard;
@@ -680,7 +713,7 @@ async function renderReport() {
     <div class="meta">
       <span class="badge gold"><i></i>${esc(ds.region)}</span>
       <span class="badge mute">${esc(ds.period)} review</span>
-      <span class="badge ${ds.data_mode === 'live' ? 'ok' : 'warn'}"><i></i>${esc(ds.data_mode)} data</span>
+      <span class="badge ${['live','verified'].includes(ds.data_mode) ? 'ok' : 'warn'}"><i></i>${esc(ds.data_mode)} data</span>
       <span class="badge ${fc.reliability_score >= 80 ? 'ok' : 'warn'}"><i></i>Reliability ${fc.reliability_score || 0}/100</span>
       <span class="badge mute">${ds.sources.length} sources</span>
       <span class="badge mute">${shortDate(r.created_at)}</span>
@@ -838,7 +871,7 @@ function renderTab() {
       <td class="tiny">${esc(l.error_message||'—')}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No logs recorded.</td></tr>'}
       </tbody></table></div>`) +
       `<div style="height:16px"></div><div class="grid g3">
-        ${card('Failure isolation', 'Always-on', `<p class="small muted">Each agent runs inside an isolation boundary. A missing key, timeout or malformed provider response falls back to the local analytical engine, so one failure never stops the pipeline.</p>`)}
+        ${card('Failure policy', 'Fail closed', `<p class="small muted">A missing key, failed provider or missing live evidence stops the answer. Meridian never substitutes a template or local analytical result.</p>`)}
         ${card('Encrypted vault', 'Fernet', `<p class="small muted">API keys are encrypted before they reach the database. Only masked values are ever returned to the browser.</p>`)}
         ${card('Data provenance', esc(ds.data_mode), `<p class="small muted">${esc(ds.confidence_note)}</p>`)}
       </div>`;
@@ -848,17 +881,18 @@ function renderTab() {
 
 async function renderCompare() {
   const c = S.compare;
-  let html = `<div class="card" style="margin-bottom:20px">
+  const canAnswer = answersEnabled();
+  let html = `${answerGateHtml()}<div class="card" style="margin-bottom:20px">
     <div class="card-head"><div><span class="eyebrow">COMPARISON MODE</span><h2>Head-to-head intelligence</h2>
       <p>Compare two companies, or two saved reports, across every tracked dimension.</p></div></div>
     <div class="vs-head">
-      <div class="field"><label>Company A</label><input type="text" id="cmpA" placeholder="e.g. Tesla" value="${esc(S.cmpA || '')}" /></div>
+      <div class="field"><label>Company A</label><input type="text" id="cmpA" placeholder="e.g. Tesla" value="${esc(S.cmpA || '')}" ${canAnswer ? '' : 'disabled'} /></div>
       <div class="vs-orb">VS</div>
-      <div class="field"><label>Company B</label><input type="text" id="cmpB" placeholder="e.g. BYD" value="${esc(S.cmpB || '')}" /></div>
+      <div class="field"><label>Company B</label><input type="text" id="cmpB" placeholder="e.g. BYD" value="${esc(S.cmpB || '')}" ${canAnswer ? '' : 'disabled'} /></div>
     </div>
     <div class="composer-row" style="margin-top:0">
-      <div class="field"><label>Region</label><select id="cmpRegion">${(S.settings?.regions||['Global']).map(r=>`<option>${esc(r)}</option>`).join('')}</select></div>
-      <button class="btn btn-gold" data-action="compare-companies">${icon('swap')} Run comparison</button>
+      <div class="field"><label>Region</label><select id="cmpRegion" ${canAnswer ? '' : 'disabled'}>${(S.settings?.regions||['Global']).map(r=>`<option>${esc(r)}</option>`).join('')}</select></div>
+      <button class="btn btn-gold" data-action="compare-companies" ${canAnswer ? '' : 'disabled'}>${icon('swap')} Run comparison</button>
       <button class="btn btn-ghost" data-action="compare-selected">${icon('file')} Compare two saved reports</button>
     </div></div>`;
   if (c && c.metrics) {
@@ -870,7 +904,7 @@ async function renderCompare() {
           return `<div class="metric-row">
             <div><div class="metric-val a ${winA?'win':''}">${fmt(m.a,1)}${esc(m.unit)}</div>
             <div class="bar-compare"><i class="ba" style="width:${m.a/total*100}%"></i><i class="bb" style="width:${m.b/total*100}%"></i></div></div>
-            <div class="m-name">${esc(m.metric)}</div>
+            <div class="m-name">${esc(m.metric)}${m.note ? `<div class="tiny muted" style="margin-top:4px">${esc(m.note)}</div>` : ''}</div>
             <div><div class="metric-val b ${!winA?'win':''}">${fmt(m.b,1)}${esc(m.unit)}</div>
             <div class="bar-compare"><i class="ba" style="width:${m.a/total*100}%"></i><i class="bb" style="width:${m.b/total*100}%"></i></div></div></div>`;
         }).join('') + `<div class="info-strip" style="margin:18px 0 0">${icon('spark')}<div><b>Verdict.</b> ${esc(c.verdict)}</div></div>`,
@@ -985,7 +1019,9 @@ async function renderSettings() {
   let html = `<div class="info-strip">${icon('shield')}<div><b>Your keys never leave this machine unencrypted.</b>
     Each agent has its own independent key slot. Keys are encrypted with Fernet (AES-128-CBC + HMAC)
     before storage, and only masked values are returned to this page. You may use the same key in every slot,
-    or mix providers freely. No key is required — the local analytical engine runs the full pipeline.</div></div>
+    or mix providers freely. <b>At least one active key is required before Meridian will generate an answer.</b>
+    With no configured API, reports, chat, translation and comparisons are refused rather than answered from templates.</div></div>
+  ${answerGateHtml()}
   <div class="card" style="margin-bottom:20px">
     <div class="card-head"><div><span class="eyebrow">QUICK SETUP</span><h3>Use one key for all agents</h3>
       <p>Ideal when you have a single Groq, Gemini or OpenAI key. Every slot is updated at once.</p></div>
@@ -1029,7 +1065,7 @@ async function renderSettings() {
         <button class="btn btn-outline btn-sm" data-action="test-key">${icon('refresh')} Test connection</button>
         <button class="btn btn-ghost btn-sm" data-action="delete-key">${icon('trash')}</button>
       </div>
-      <div class="slot-result tiny muted" style="margin-top:10px">${s.configured ? `Encrypted at rest · ${esc(s.model_label || s.model || 'default model')}` : 'Uses the local analytical engine until a key is saved.'}</div>
+      <div class="slot-result tiny muted" style="margin-top:10px">${s.configured ? `Encrypted at rest · ${esc(s.model_label || s.model || 'default model')}` : 'No key saved. This slot can borrow another active provider; if none exists, answers stay disabled.'}</div>
       <div style="margin-top:10px"><a class="tiny" id="signup-${s.slot}" href="#" target="_blank" rel="noopener">Get a free key ↗</a></div>
     </section>`;
   });
@@ -1076,7 +1112,7 @@ function renderGuide() {
       <p>Use the <strong>Region</strong>, <strong>Time period</strong> and <strong>Competitor focus</strong> filters to recompute every chart. Hover any chart for precise values, and click a legend item to toggle a series.</p>
       <p>Tabs cover the full written report, the 12-month forecast with confidence bands, claim-level verification, the source appendix and agent execution logs.</p></div>`)}
     ${card('3 · Configure API keys', 'Settings → API Keys', `<div class="md">
-      <p>Meridian works with no keys at all via its local analytical engine. To add live LLM intelligence, open <strong>API Keys</strong>, pick a free or paid provider for each agent slot, paste a key and press <strong>Save key</strong>.</p>
+      <p><strong>Meridian will not answer without an API.</strong> Open <strong>API Keys</strong>, pick a free or paid provider, paste a key and press <strong>Save key</strong>. One active key can serve every agent; the deterministic engine is available only in explicitly labelled sample mode for offline testing.</p>
       <p><strong>Test connection</strong> performs a real, minimal request to the provider and reports latency and quota headers. The quick-setup bar applies one key to all slots at once.</p></div>`)}
     ${card('4 · Ask, translate, compare, export', 'Power features', `<div class="md">
       <p>Use the <strong>Ask</strong> button for grounded follow-up questions about rural markets, competitors, risks, sources or next steps. Translate the entire report into any of 14 languages from the report header.</p>
@@ -1085,7 +1121,7 @@ function renderGuide() {
   ${sectionTitle('Data & honesty')}
   ${card('Where the numbers come from', 'Provenance is always visible', `<div class="md">
     <p>Meridian attempts live connectors for web search (Tavily / DuckDuckGo), Yahoo Finance, NewsAPI, Reddit sentiment and World Bank macro indicators. Each connector is failure-isolated.</p>
-    <p>When a connector or LLM key is unavailable, a deterministic, query-aware analytical engine produces consistent figures, clearly labelled <strong>simulated</strong> in the data-mode badge, the report and the fact-check section. Modelled figures are explicitly flagged ⚠️ — confirm them with primary sources before external publication.</p>
+    <p>If no provider key is configured, or a provider/live connector fails, Meridian returns an actionable error instead of producing a plausible template answer. Invented publisher citations have been removed. Numeric chart series that no live source supplied are treated as unverified placeholders, never as measurements.</p>
     <p>Add keys in Settings or set <code>TAVILY_API_KEY</code>, <code>NEWS_API_KEY</code> and <code>DATABASE_URL</code> in your environment to upgrade to live data.</p></div>`)}
   <div class="divider"></div>
   <p class="small muted" style="text-align:center">Developed by <b class="gold">Mridul Sharma</b> · Meridian v1.0.0 · Market Intelligence, Redefined.</p>`;
@@ -1144,6 +1180,7 @@ async function renderView() {
   renderCharts();
 }
 async function generate() {
+  if (!answersEnabled()) { toast(readiness()?.message || 'Connect an API key first', 'err'); navigate('settings'); return; }
   const q = $('#queryInput')?.value.trim();
   if (!q || q.length < 3) { toast('Enter a research query of at least 3 characters', 'err'); return; }
   const btn = $('[data-action="generate"]');
@@ -1160,6 +1197,7 @@ async function generate() {
   finally { if (btn) { btn.disabled = false; btn.innerHTML = `${icon('spark')} Generate Intelligence`; } }
 }
 async function openChat() {
+  if (!answersEnabled()) { toast(readiness()?.message || 'Connect an API key first', 'err'); navigate('settings'); return; }
   if (!S.reportId) { toast('Open a report first to ask follow-up questions', 'info'); return; }
   S.chatReport = S.reportId;
   $('#chatDock').hidden = false; $('#chatFab').style.display = 'none';
@@ -1249,7 +1287,7 @@ document.addEventListener('click', async (ev) => {
       await api('/api/settings/keys', {method:'POST', body:{slot, provider:$('.s-provider', c).value,
         api_key:key, model:$('.s-model', c).value}});
       $('.slot-result', c).textContent = '✓ Saved and encrypted with Fernet.';
-      toast(`${slot} key saved and encrypted`, 'ok'); await refreshChrome();
+      toast(`${slot} key saved and encrypted`, 'ok'); await refreshChrome(); await renderView();
     }
     else if (a === 'test-key') {
       const c = t.closest('.slot-card'), slot = c.dataset.slot, out = $('.slot-result', c);
@@ -1261,10 +1299,10 @@ document.addEventListener('click', async (ev) => {
     }
     else if (a === 'delete-key') {
       const c = t.closest('.slot-card'), slot = c.dataset.slot;
-      if (!confirm(`Remove the ${slot} key? The local engine will take over.`)) return;
+      if (!confirm(`Remove the ${slot} key? If no active provider remains, answers will be disabled.`)) return;
       await api(`/api/settings/keys/${slot}`, {method:'DELETE'});
-      $('.slot-result', c).textContent = 'Key removed — local analytical engine active.';
-      toast(`${slot} key removed`, 'ok'); await refreshChrome();
+      $('.slot-result', c).textContent = 'Key removed. Answers are disabled unless another provider slot is active.';
+      toast(`${slot} key removed`, 'ok'); await refreshChrome(); await renderView();
     }
     else if (a === 'or-refresh') await loadOpenRouterModels(true);
     else if (a === 'apply-all') {

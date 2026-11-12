@@ -6,6 +6,7 @@ import time
 import streamlit as st
 
 from app import services
+from app.api import answer_policy
 from app.config import REGIONS, PERIODS, SUPPORTED_LANGUAGES
 from app.ui.components import (history_chart, kpi_strip, plot, share_chart,
                                badge)
@@ -18,6 +19,11 @@ def render() -> None:
          "and fact-check a board-ready market report — with interactive charts and instant exports.",
          "MULTI-AGENT MARKET INTELLIGENCE")
 
+    ready = answer_policy.readiness()
+    if ready["sample_mode"]:
+        st.warning("SAMPLE MODE — offline sample data only. This is not real research.")
+    elif not ready["answers_enabled"]:
+        st.error(f"{ready['message']} {ready['hint']}")
     with st.form("query_form", clear_on_submit=False):
         query = st.text_input("Research query",
                               placeholder="e.g. Indian electric vehicle market 2026 — Tesla vs BYD")
@@ -30,15 +36,20 @@ def render() -> None:
             language = st.selectbox("Language", [n for _, _, n in SUPPORTED_LANGUAGES])
         with c4:
             st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
-            go = st.form_submit_button("◆  Generate Intelligence", use_container_width=True)
+            go = st.form_submit_button("◆  Generate Intelligence", use_container_width=True,
+                                       disabled=not ready["answers_enabled"])
     if go:
         if len(query.strip()) < 3:
             st.error("Enter a research query of at least 3 characters.")
         else:
             code = next(c for c, _, n in SUPPORTED_LANGUAGES if n == language)
             with st.spinner("Dispatching the agent pipeline…"):
-                rid = services.start_report(query.strip(), region=region,
-                                            period=period, language=code)
+                try:
+                    rid = services.start_report(query.strip(), region=region,
+                                                period=period, language=code)
+                except Exception as exc:
+                    st.error(str(exc))
+                    return
                 deadline = time.time() + 30
                 while time.time() < deadline:
                     stt = services.job_status(rid)

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from app import services
+from app.api import answer_policy
 from app.ui.components import plot
 from app.ui.theme import PLOTLY_LAYOUT, hero
 
@@ -12,12 +13,18 @@ from app.ui.theme import PLOTLY_LAYOUT, hero
 def render() -> None:
     hero("Compare Mode", "Side-by-side intelligence for two companies or two saved reports.",
          "COMPARISON MODE")
+    ready = answer_policy.readiness()
+    if ready["sample_mode"]:
+        st.warning("SAMPLE MODE — comparison metrics are offline sample data.")
+    elif not ready["answers_enabled"]:
+        st.error(f"{ready['message']} {ready['hint']}")
     c1, c2, c3 = st.columns([2, 2, 1.2])
     with c1: a = st.text_input("Company A", "Tesla")
     with c2: b = st.text_input("Company B", "BYD")
     with c3:
         st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
-        run = st.button("◆  Compare", use_container_width=True)
+        run = st.button("◆  Compare", use_container_width=True,
+                        disabled=not ready["answers_enabled"])
     if run:
         try:
             data = services.compare_companies(a, b)

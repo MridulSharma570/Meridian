@@ -1,7 +1,9 @@
 """Central configuration for Meridian.
 
-All settings are read from the environment (or a local ``.env`` file) with
-safe, demo-friendly defaults. Nothing here requires a paid service to boot.
+All settings are read from the environment (or a local ``.env`` file).
+Booting requires no external service, but **generating an answer does**: see
+:mod:`app.api.answer_policy`. The deterministic engine is sample-only and is
+disabled unless ``MERIDIAN_SAMPLE_MODE`` is explicitly enabled.
 """
 from __future__ import annotations
 
@@ -116,7 +118,10 @@ class Settings:
     max_sources: int = _int_env("MERIDIAN_MAX_SOURCES", 12)
 
     # Behaviour.
-    demo_mode: bool = _bool("MERIDIAN_DEMO_MODE", True)
+    # Offline sample data is OFF by default: the product must not answer
+    # without a real API. See app/api/answer_policy.py.
+    demo_mode: bool = _bool("MERIDIAN_DEMO_MODE", False)
+    require_live_evidence: bool = _bool("MERIDIAN_REQUIRE_LIVE_EVIDENCE", True)
     enable_live_data: bool = _bool("MERIDIAN_LIVE_DATA", True)
     use_yfinance: bool = _bool("MERIDIAN_USE_YFINANCE", False)
     max_workers: int = _int_env("MERIDIAN_MAX_WORKERS", 6)

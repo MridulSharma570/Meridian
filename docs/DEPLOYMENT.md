@@ -31,7 +31,8 @@ python run.py                             # http://localhost:8000
 The first boot automatically:
 1. creates the SQLite schema at `data/meridian.db`,
 2. generates a `0600` Fernet key at `data/.fernet_key`,
-3. seeds one complete demo report so the dashboard is never empty.
+3. leaves the dashboard empty until a provider API key is configured; no
+   sample report is manufactured in production mode.
 
 Open **http://localhost:8000**. Interactive API docs are at `/docs`.
 
@@ -49,8 +50,8 @@ streamlit run app/main.py                 # same, directly
 ```bash
 python -m scripts.setup_db                # create/verify schema + demo user
 python -m scripts.migrate                 # idempotent column migration
-python -m scripts.seed_data               # four curated demo reports
-pytest -q                                 # 88-test verification suite
+MERIDIAN_SAMPLE_MODE=true python -m scripts.seed_data  # optional SAMPLE reports
+pytest -q                                 # 101-test verification suite
 python -m compileall app                  # syntax smoke test
 ```
 

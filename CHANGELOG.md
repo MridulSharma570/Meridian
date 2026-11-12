@@ -58,6 +58,22 @@ here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — No answers without a real API
+- Removed the production behaviour that generated complete reports, chat
+  answers, translations and comparisons from the deterministic local engine
+  when no API key was configured. Generated answers now require at least one
+  active provider key; failures return a structured `409 answer_unavailable`
+  with a Settings hint instead of a plausible template.
+- Reports also require live evidence. The collector strips fabricated
+  citations/headlines, removes real publisher names from generated sample
+  sources, zeroes unsupported numeric series, and records only retrieved items
+  as `verified_sources`. Legacy unverified reports are no longer served as
+  verified dashboards/exports.
+- The deterministic engine remains only behind explicit
+  `MERIDIAN_SAMPLE_MODE=true`, is labelled `SAMPLE` everywhere, and is used by
+  the offline test suite. Production defaults are sample off and live evidence
+  required. Both frontends disable generation and explain how to connect a key.
+
 ### Changed — Phone-first layout, bottom bar removed
 - Removed the five-button bottom navigation bar completely (HTML, CSS, JS, docs and
   tests). On phones the whole viewport is content; a labelled **Menu** button

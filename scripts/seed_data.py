@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Populate Meridian with a curated set of complete demo reports.
+"""Populate Meridian with explicitly labelled SAMPLE reports.
 
-    python -m scripts.seed_data
+This script is for offline UI demos/tests only. It refuses to run unless
+``MERIDIAN_SAMPLE_MODE=true`` is set, because production Meridian must not
+create plausible market reports without a provider API and live evidence.
+
+    MERIDIAN_SAMPLE_MODE=true python -m scripts.seed_data
 """
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import services  # noqa: E402
+from app.api import answer_policy  # noqa: E402
 
 SEEDS = [
     ("Global artificial intelligence platforms market 2026", "Global", "5Y", "en"),
@@ -22,7 +27,12 @@ SEEDS = [
 
 
 def main() -> None:
-    print("◆  MERIDIAN — seeding demo intelligence reports")
+    if not answer_policy.sample_mode():
+        raise SystemExit(
+            "Refusing to seed sample reports in production mode. "
+            "Set MERIDIAN_SAMPLE_MODE=true for an offline demo, or configure a "
+            "provider API key and generate a verified report from the UI.")
+    print("◆  MERIDIAN — seeding SAMPLE intelligence reports (not real research)")
     for query, region, period, lang in SEEDS:
         rid = services.start_report(query, region=region, period=period, language=lang)
         deadline = time.time() + 30

@@ -8,6 +8,12 @@ All requests and responses are JSON unless stated. Errors return
 `500` for unexpected failures. Every endpoint is CORS-enabled and uses relative
 paths only.
 
+Generated-answer endpoints fail closed. When no provider API key is configured,
+when a provider call fails, or when no live evidence can be collected, they
+return **409** with `{"error":"answer_unavailable","reason":"api_key_required",
+"message":"...","hint":"...","setup_path":"#/settings"}` rather than a
+template-generated answer.
+
 ---
 
 ## System
@@ -18,7 +24,8 @@ paths only.
 | `GET` | `/static/{file}` | `app.css`, `app.js`, `favicon.svg` |
 | `GET`, `HEAD` | `/api/ping` | Ultra-light, no-database liveness probe with `Cache-Control: no-store`. Use for Render health checks and external keep-alive monitors. |
 | `GET`, `HEAD` | `/api/health` | Liveness, version, DB engine, platform, port, warm-up state, keep-alive counters, developer |
-| `GET` | `/api/bootstrap` | First-load payload: app info, stats, settings, agents, pipeline. Demo seeding runs in a background thread, so this never blocks startup. |
+| `GET` | `/api/bootstrap` | First-load payload: app info, stats, settings, agents, pipeline and `readiness`. No sample report is seeded in production mode. |
+| `GET` | `/api/readiness` | Whether answers are enabled, configured LLM slots, sample mode and live-connector status. |
 | `GET` | `/api/stats` | Totals, average reliability, sources, agent runs, active keys |
 | `GET` | `/api/agents` | Agent metadata, pipeline stages, chat suggestions |
 | `GET` | `/api/providers` | All 16 providers, tier, models, hints, signup URLs |
@@ -31,7 +38,7 @@ paths only.
  "tagline":"Market Intelligence, Redefined.","developer":"Mridul Sharma",
  "database":"sqlite","platform":"local","port":8000,"warming_up":false,
  "keepalive":{"enabled":false,"interval_s":600,"target":"","successes":0,"failures":0},
- "demo_mode":true}
+ "demo_mode":false,"readiness":{"answers_enabled":false,"reason":"api_key_required"}}
 ```
 
 **Example** `GET /api/ping`
@@ -166,7 +173,7 @@ Performs a real minimal completion. Returns
 `{ok:false, slot, error}` — the error is always key-safe.
 
 ### `DELETE /api/settings/keys/{slot}`
-Removes the key; the local engine takes over.
+Removes the key. If no active provider remains, generated answers are disabled.
 
 ### `POST /api/settings/keys/apply-all`
 ```json

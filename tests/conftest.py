@@ -13,6 +13,10 @@ os.environ["MERIDIAN_FERNET_KEY_FILE"] = str(_TMP / ".fernet_key")
 os.environ["MERIDIAN_LIVE_DATA"] = "false"
 os.environ["MERIDIAN_USE_YFINANCE"] = "false"
 os.environ["MERIDIAN_DEMO_MODE"] = "true"
+# Existing pipeline/export tests exercise the explicitly labelled offline
+# sample engine. Production defaults remain off; answer-policy tests opt out
+# per-test with monkeypatch.delenv("MERIDIAN_SAMPLE_MODE").
+os.environ["MERIDIAN_SAMPLE_MODE"] = "true"
 
 import pytest  # noqa: E402
 
