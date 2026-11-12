@@ -30,7 +30,7 @@ except Exception as exc:  # never let Streamlit die on a cold database
 
 with st.sidebar:
     st.markdown('<div class="mrd-logo">◆ &nbsp; MERIDIAN</div>'
-                '<p style="color:#64748B;font-size:10px;letter-spacing:.12em;margin-top:2px">'
+                '<p style="color:#8F8474;font-size:10px;letter-spacing:.12em;margin-top:2px">'
                 'MARKET INTELLIGENCE, REDEFINED.</p>', unsafe_allow_html=True)
     st.markdown("<div class='mrd-rule'></div>", unsafe_allow_html=True)
     page = st.radio("Navigation",

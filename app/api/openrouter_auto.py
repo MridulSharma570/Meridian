@@ -13,8 +13,9 @@ Official references
 
 Design rules
   * No API key is ever sent to the catalogue endpoint (it is public).
-  * Every candidate is free (zero prompt/completion price, or ``:free``), so a
-    fallback can never silently turn a free slot into a billable request.
+  * Every candidate is an explicit ``:free`` variant with every published
+    price field set to zero, so a fallback can never silently turn a free
+    slot into a billable or funded-account-only request.
   * Any network/parsing failure degrades to ``openrouter/free`` (OpenRouter's
     own capability-aware free router) — no stale, possibly retired slugs.
   * A model that 404s / rate-limits is cooled down and skipped on the next call.
@@ -160,19 +161,32 @@ def _expired(value: Any, now: float) -> bool:
 
 
 def _is_free_chat_model(m: Dict[str, Any], now: float) -> bool:
-    """Keep only free, text-in/text-out, chat-completions-capable models."""
+    """Keep only genuinely free, text-in/text-out chat models.
+
+    OpenRouter distinguishes a *free variant* (an ID ending in ``:free``)
+    from a merely $0-priced preview. The latter can still require a funded
+    account and is exactly the kind of route that produces an HTTP 402 on an
+    account that has never purchased credits. A free slot therefore accepts
+    only ``:free`` variants. Every published price field must also be zero:
+    a model can look free in prompt/completion while charging per request,
+    image, search or cache operation.
+    """
     mid = str(m.get("id") or "").strip()
     if not mid or mid != mid.lower() or any(t in mid.lower() for t in _EXCLUDE_ID_TOKENS):
         return False
-    if "/" not in mid:                       # router slugs / aliases are not models
+    if "/" not in mid or not mid.endswith(":free"):
         return False
     pricing = m.get("pricing") or {}
-    if not isinstance(pricing, dict):
+    if not isinstance(pricing, dict) or not pricing:
         return False
-    if not (_zero(pricing.get("prompt")) and _zero(pricing.get("completion"))):
-        return False
-    if not _zero(pricing.get("request", 0)):
-        return False
+    for value in pricing.values():
+        # ``-1`` means variable pricing upstream; it is not free. Unknown
+        # non-numeric prices are also rejected rather than assumed to be $0.
+        try:
+            if float(value) != 0.0:
+                return False
+        except (TypeError, ValueError):
+            return False
 
     arch = m.get("architecture") or {}
     if not isinstance(arch, dict) or not arch:
@@ -225,10 +239,7 @@ def _score(m: Dict[str, Any], now: float) -> float:
         except (TypeError, ValueError):
             pass
 
-    if mid.endswith(":free"):
-        points += 4.0                         # explicitly free variant
-    else:
-        points -= 3.0                         # zero-priced preview, may vanish
+    points += 4.0                             # every candidate is a :free variant
     if any(f in mid for f in _STRONG_FAMILIES):
         points += 4.0
     tiny = _TINY_MODEL.search(mid)

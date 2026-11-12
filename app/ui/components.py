@@ -45,7 +45,7 @@ def history_chart(history: List[dict]) -> go.Figure:
         mode="lines+markers", name="Market size (USD B)",
         line=dict(color=PALETTE["gold"], width=3),
         marker=dict(size=7, color=PALETTE["gold2"], line=dict(color=PALETTE["navy"], width=1)),
-        fill="tozeroy", fillcolor="rgba(201,168,76,.10)",
+        fill="tozeroy", fillcolor="rgba(198,161,91,.10)",
         hovertemplate="%{x}: <b>%{y:,.1f}B</b><extra></extra>"))
     return _apply(fig)
 
@@ -96,7 +96,7 @@ def sentiment_heatmap(dataset: Dict[str, Any]) -> go.Figure:
     fig = go.Figure(go.Heatmap(
         z=dataset["heatmap"], x=dataset["heatmap_weeks"],
         y=dataset["heatmap_channels"], colorscale=[
-            [0, "#E11D48"], [.35, "#F59E0B"], [.6, "#C9A84C"], [1, "#059669"]],
+            [0, "#0B0906"], [.35, "#8C6D2F"], [.65, "#C6A15B"], [1, "#F3ECDD"]],
         zmin=0, zmax=1, colorbar=dict(title="Score", tickfont=dict(color=PALETTE["slate"])),
         hovertemplate="<b>%{y}</b> · %{x}<br>Sentiment %{z:.0%}<extra></extra>"))
     fig.update_layout(**{k: v for k, v in PLOTLY_LAYOUT.items() if k != "hovermode"}, height=300)

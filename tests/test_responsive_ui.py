@@ -226,3 +226,41 @@ def test_stylesheet_has_balanced_braces():
     import re
     css = re.sub(r"/\*.*?\*/", "", read("app/web/app.css"), flags=re.S)
     assert css.count("{") == css.count("}")
+
+
+def test_three_colour_atelier_is_used_consistently():
+    """Only Obsidian, Champagne and Pearl define the visual system."""
+    css = read("app/web/app.css")
+    js = read("app/web/app.js")
+    html = read("app/web/index.html")
+    for token in ("#0B0906", "#C6A15B", "#F3ECDD", "--ink", "--champagne", "--pearl"):
+        assert token in css, f"atelier token missing from CSS: {token}"
+    assert "const PALETTE = ['#C6A15B', '#F3ECDD'" in js
+    assert 'content="#0B0906"' in html
+    for rel in ("app/web/app.css", "app/web/app.js", "app/web/index.html",
+                "app/ui/theme.py", "app/assets/custom.css"):
+        text = read(rel)
+        for old in ("#0A1628", "#C9A84C", "#4C7BF3", "#8B7CF6", "#059669",
+                    "#E11D48", "#38BDF8", "#F59E0B"):
+            assert old not in text, f"old palette colour {old} returned in {rel}"
+
+
+def test_universal_fit_contracts_cover_every_surface():
+    css = read("app/web/app.css")
+    js = read("app/web/app.js")
+    for marker in (".shell,.main-wrap,.content,.card,.grid>*",
+                   ".card-head>div:first-child{min-width:0",
+                   ".grow-field{flex:1 1 220px",
+                   ".translate-field{margin-left:auto",
+                   ".chat-dock{width:min(390px,calc(100vw - 32px))",
+                   ".toast-stack{width:min(390px,calc(100vw - 32px))",
+                   "body:has(.shell.mission-hidden) .chat-fab",
+                   ".or-help{display:flex", ".saved-key.test-failed",
+                   "@media(max-width:1000px)", "#slotGrid{grid-template-columns:minmax(0,1fr)",
+                   "@media(max-width:900px)", ".hero-compact{padding:22px 16px 20px}"):
+        assert marker in css, f"fit rule missing: {marker}"
+    assert 'class="field grow-field"' in js
+    assert 'class="field translate-field"' in js
+    assert 'class="hero hero-compact"' in js
+    assert "slot-state-badge" in js
+    assert "Seeing HTTP 402?" in js

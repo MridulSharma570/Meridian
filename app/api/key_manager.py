@@ -112,12 +112,29 @@ def save_key(agent_name: str, provider: str, api_key: str, model: str = "",
     p = get_provider(provider)
     clean = (api_key or "").strip()
     if not clean and provider != "ollama":
-        raise ValueError("API key cannot be empty")
+        # The Settings form promises "leave blank to keep current". Preserve
+        # the already-encrypted credential for this same slot instead of
+        # rejecting a provider/model-only change.
+        existing = queries.get_api_key_row(agent_name)
+        if existing:
+            clean = decrypt(existing["encrypted"])
+            if clean == "local-no-key-required":
+                clean = ""
+        if not clean:
+            raise ValueError("API key cannot be empty")
     effective_model = normalize_model(provider, model or p.default_model)
     # OpenRouter's live free catalogue is accepted too (any :free slug), while
-    # a paid model can never be pinned on a free provider by mistake.
+    # a paid model can never be pinned on a free provider by mistake. Fail
+    # loudly instead of silently saving a different model than the user chose.
     if not is_allowed_model(provider, effective_model):
-        effective_model = p.default_model
+        if provider == "openrouter_free":
+            raise ValueError(
+                "That model is not a free OpenRouter variant. Choose "
+                "“Auto — best free model (live)”, “OpenRouter free router”, "
+                "or a model whose ID ends in :free.")
+        raise ValueError(
+            f"Model '{effective_model}' is not available for {p.label}. "
+            "Choose one of the listed models.")
     token = encrypt(clean) if clean else encrypt("local-no-key-required")
     return queries.upsert_api_key(agent_name, provider, token, effective_model, is_active)
 
@@ -150,13 +167,17 @@ def key_status() -> List[Dict[str, Any]]:
     for slot, label, icon, desc in AGENT_SLOTS:
         r = rows.get(slot)
         if r:
+            key_error = False
             try:
                 plain = decrypt(r["encrypted"])
             except ValueError:
                 plain = ""
+                key_error = True
             out.append({
                 "slot": slot, "name": label, "icon": icon, "description": desc,
-                "configured": True, "masked_key": mask(plain),
+                "configured": bool(plain) and not key_error,
+                "key_error": key_error,
+                "masked_key": "Unreadable — re-enter key" if key_error else mask(plain),
                 "provider": r["provider"],
                 "model": normalize_model(r["provider"], r["model"]),
                 "model_label": model_label(r["provider"],
@@ -167,7 +188,7 @@ def key_status() -> List[Dict[str, Any]]:
         else:
             out.append({
                 "slot": slot, "name": label, "icon": icon, "description": desc,
-                "configured": False, "masked_key": "—", "provider": "",
+                "configured": False, "key_error": False, "masked_key": "—", "provider": "",
                 "model": "", "model_label": "", "is_active": False, "quota_info": None,
                 "last_tested_at": None, "last_test_ok": None,
             })

@@ -1,18 +1,18 @@
 /* ==========================================================================
    MERIDIAN — shared design tokens (mirrors app/web/app.css)
-   Deep Navy #0A1628 · Champagne Gold #C9A84C · Ivory Platinum #EDE4D3
+   Obsidian #0B0906 · Champagne Gold #C6A15B · Pearl #F3ECDD
    Developed by Mridul Sharma
    ========================================================================== */
 :root{
-  --navy:#0A1628;--navy-2:#111C32;--card:#1A2744;
-  --gold:#C9A84C;--gold-2:#E8CE8A;--gold-3:#8C7231;
-  --ivory:#EDE4D3;--white:#F8FAFC;--muted:#94A3B8;--slate:#64748B;
-  --violet:#8B7CF6;--sapphire:#4C7BF3;
-  --success:#059669;--success-2:#34D399;--danger:#E11D48;--warn:#F59E0B;
-  --line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.045);
-  --glass:rgba(26,39,68,.62);
+  --navy:#0B0906;--navy-2:#17120D;--card:#211A13;
+  --gold:#C6A15B;--gold-2:#E7CE8C;--gold-3:#8C6D2F;
+  --ivory:#F3ECDD;--white:#F3ECDD;--muted:#B9AE9C;--slate:#8F8474;
+  --violet:#F3ECDD;--sapphire:#E7CE8C;
+  --success:#C6A15B;--success-2:#E7CE8C;--danger:#F3ECDD;--warn:#C6A15B;
+  --line:rgba(243,236,221,.08);--line-2:rgba(243,236,221,.045);
+  --glass:rgba(33,26,19,.62);
   --shadow:0 2px 4px rgba(0,0,0,.18),0 8px 24px rgba(0,0,0,.22),0 24px 64px rgba(0,0,0,.24);
-  --shadow-gold:0 4px 24px rgba(201,168,76,.22),0 12px 40px rgba(201,168,76,.10);
+  --shadow-gold:0 4px 24px rgba(198,161,91,.22),0 12px 40px rgba(198,161,91,.10);
   --radius:16px;--radius-sm:12px;
   --f-head:'Satoshi','Inter',system-ui,sans-serif;
   --f-body:'Inter',system-ui,sans-serif;
@@ -21,20 +21,28 @@
 .mrd-card{background:var(--glass);backdrop-filter:blur(20px);
   border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:24px}
-.mrd-btn-primary{background:linear-gradient(145deg,var(--gold),#B8943F);
+.mrd-btn-primary{background:linear-gradient(145deg,var(--gold),#A9853D);
   color:var(--navy);border:0;border-radius:12px;padding:11px 18px;
   font-weight:600;font-size:13px;box-shadow:var(--shadow-gold);
   transition:transform .2s ease,box-shadow .2s ease}
 .mrd-btn-primary:hover{transform:translateY(-1px) scale(1.02)}
-.mrd-btn-secondary{background:transparent;border:1px solid rgba(201,168,76,.5);
+.mrd-btn-secondary{background:transparent;border:1px solid rgba(198,161,91,.5);
   color:var(--gold-2);border-radius:12px;padding:11px 18px}
-.mrd-btn-secondary:hover{background:rgba(201,168,76,.12)}
+.mrd-btn-secondary:hover{background:rgba(198,161,91,.12)}
 .mrd-heading{font-family:var(--f-head);font-weight:900;letter-spacing:-.03em;color:var(--ivory)}
 .mrd-data{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ivory)}
 .mrd-gold-text{background:linear-gradient(100deg,var(--gold-2),var(--gold),var(--ivory));
   -webkit-background-clip:text;background-clip:text;color:transparent}
-.mrd-skeleton{background:linear-gradient(90deg,rgba(255,255,255,.035) 25%,
-  rgba(255,255,255,.09) 50%,rgba(255,255,255,.035) 75%);
+.mrd-skeleton{background:linear-gradient(90deg,rgba(243,236,221,.035) 25%,
+  rgba(243,236,221,.09) 50%,rgba(243,236,221,.035) 75%);
   background-size:200% 100%;animation:mrd-shimmer 1.4s infinite}
 @keyframes mrd-shimmer{to{background-position:-200% 0}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Atelier fit layer: three core colours only (Obsidian/Champagne/Pearl). */
+:root{--ink:#0B0906;--champagne:#C6A15B;--pearl:#F3ECDD}
+html,body{max-width:100%;overflow-x:clip}
+img,svg,canvas,video,iframe{max-width:100%}
+.mrd-card,.mrd-hero{min-width:0;overflow:hidden;overflow-wrap:anywhere}
+.mrd-card{border-color:rgba(198,161,91,.20);box-shadow:0 18px 48px rgba(0,0,0,.30)}
+@media(max-width:700px){.mrd-card,.mrd-hero{border-radius:14px}.mrd-badge{white-space:normal;text-align:center}}

@@ -16,12 +16,12 @@
 
 **Six autonomous AI agents + one translator. One query. A board-ready market report.**
 
-Deep Navy `#0A1628` · Champagne Gold `#C9A84C` · Ivory Platinum `#EDE4D3`
+Obsidian `#0B0906` · Champagne `#C6A15B` · Pearl `#F3ECDD`
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-C9A84C)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-C9A84C)](#changelog)
+[![License: MIT](https://img.shields.io/badge/License-MIT-C6A15B)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-C6A15B)](#changelog)
 
 </div>
 
@@ -68,7 +68,7 @@ provider key in Settings before generating a report. Interactive API docs:
 ```bash
 python run.py --streamlit           # optional Streamlit frontend on :8501
 MERIDIAN_SAMPLE_MODE=true python -m scripts.seed_data  # optional SAMPLE reports
-pytest -q                          # 101 tests
+pytest -q                          # 105 tests
 docker compose up -d --build        # full stack: app + Postgres + Redis
 ```
 
@@ -173,7 +173,7 @@ Open **Settings → API Keys** in the app (or **API Keys** in Streamlit).
   and quota headers.
 - **OpenRouter (Free) auto-selection:** the default model is
   **Auto — best free model (live)**. Meridian reads OpenRouter's public
-  `GET /api/v1/models` catalogue, keeps only zero-price text→text chat models,
+  `GET /api/v1/models` catalogue, keeps only explicit `:free` text→text chat models (every published price field must be zero),
   ranks them (context window, output length, JSON/tool support, published
   benchmark scores, freshness) and attaches an **all-free** fallback chain. A retired or rate-limited `:free`
   model is replaced automatically; OpenRouter's `openrouter/auto` and paid
@@ -197,12 +197,12 @@ Step-by-step instructions for all 16 providers: [docs/API_KEYS_SETUP.md](docs/AP
 
 | Token | Value | Use |
 |-------|-------|-----|
-| Deep Navy | `#0A1628` | Primary background |
-| Champagne Gold | `#C9A84C` | Accents, CTAs, highlights |
-| Ivory Platinum | `#EDE4D3` | Premium type, logo, emphasis |
-| Secondary Navy | `#111C32` | Panels |
-| Card | `#1A2744` | Glassmorphism (`blur(20px)`, `1px rgba(255,255,255,.08)`) |
-| Success / Danger | `#059669` / `#E11D48` | Trends, verification |
+| Obsidian | `#0B0906` | Primary background |
+| Champagne | `#C6A15B` | Accents, CTAs, highlights |
+| Pearl | `#F3ECDD` | Premium type, logo, emphasis |
+| Obsidian tint | `#17120D` | Panels (tonal shade of Obsidian) |
+| Card | `#211A13` | Warm glass (`blur(20px)`, pearl hairline borders) |
+| Status treatment | Champagne / inverted Pearl | Trends and verification, always paired with a label or icon |
 
 **Typography:** Satoshi Bold (headings, Fontshare) · Inter (body, Google Fonts) ·
 JetBrains Mono (data). 4px type grid, 8px spacing, 16px radius, layered soft

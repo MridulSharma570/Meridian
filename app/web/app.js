@@ -22,7 +22,7 @@ const icon = (n, c = '') => `<svg class="${c}"><use href="#i-${n}"/></svg>`;
 const fmt = (n, d = 1) => Number(n || 0).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
 const fmtInt = (n) => Number(n || 0).toLocaleString('en-US');
 const shortDate = (s) => s ? String(s).replace('T', ' ').slice(0, 16) : '—';
-const PALETTE = ['#C9A84C', '#4C7BF3', '#8B7CF6', '#059669', '#E8CE8A', '#E11D48', '#38BDF8', '#F59E0B'];
+const PALETTE = ['#C6A15B', '#F3ECDD', '#8C6D2F', '#E7CE8C', '#7A5E2E', '#B9975B', '#DCC38E', '#5F4A24'];
 
 /* ---------------------------------------------------------------- API --- */
 async function api(path, opts = {}) {
@@ -353,8 +353,8 @@ function bindTooltips() {
 }
 function defs() {
   return `<defs>
-    <linearGradient id="goldFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9A84C" stop-opacity=".34"/><stop offset="1" stop-color="#C9A84C" stop-opacity="0"/></linearGradient>
-    <linearGradient id="goldStroke" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8C7231"/><stop offset=".5" stop-color="#E8CE8A"/><stop offset="1" stop-color="#C9A84C"/></linearGradient>
+    <linearGradient id="goldFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C6A15B" stop-opacity=".34"/><stop offset="1" stop-color="#C6A15B" stop-opacity="0"/></linearGradient>
+    <linearGradient id="goldStroke" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8C6D2F"/><stop offset=".5" stop-color="#E7CE8C"/><stop offset="1" stop-color="#C6A15B"/></linearGradient>
   </defs>`;
 }
 function lineChart(cfg) {
@@ -381,7 +381,7 @@ function lineChart(cfg) {
     if (cfg.band) {
       const up = cfg.band.upper.map((v, i) => `${x(i)},${y(v)}`).join(' ');
       const dn = cfg.band.lower.map((v, i) => `${x(i)},${y(v)}`).reverse().join(' ');
-      g += `<polygon points="${up} ${dn}" fill="rgba(139,124,246,.16)" stroke="none"/>`;
+      g += `<polygon points="${up} ${dn}" fill="rgba(198,161,91,.18)" stroke="none"/>`;
     }
     sets.forEach((s, si) => {
       const pts = s.values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
@@ -389,7 +389,7 @@ function lineChart(cfg) {
       if (s.area && si === 0) g += `<polygon class="area" points="${P.l},${P.t + h} ${pts} ${W - P.r},${P.t + h}" fill="url(#goldFade)"/>`;
       g += `<g data-series="${si}"><polyline class="line" points="${pts}" stroke="${col}" ${s.dash ? 'stroke-dasharray="5 5"' : ''}/>`;
       s.values.forEach((v, i) => {
-        if (s.dots !== false) g += `<circle cx="${x(i)}" cy="${y(v)}" r="2.6" fill="${col}" stroke="#0A1628" stroke-width="1.2"/>`;
+        if (s.dots !== false) g += `<circle cx="${x(i)}" cy="${y(v)}" r="2.6" fill="${col}" stroke="#0B0906" stroke-width="1.2"/>`;
       });
       g += '</g>';
     });
@@ -414,11 +414,11 @@ function donutChart(items) {
       const p = (rad, a) => `${(cx + rad * Math.cos(a)).toFixed(2)},${(cy + rad * Math.sin(a)).toFixed(2)}`;
       const d = `M ${p(R, ang)} A ${R} ${R} 0 ${large} 1 ${p(R, a2)} L ${p(r, a2)} A ${r} ${r} 0 ${large} 0 ${p(r, ang)} Z`;
       const color = it.color || PALETTE[i % PALETTE.length];
-      g += `<path d="${d}" fill="${color}" stroke="#0A1628" stroke-width="2" data-tt="${esc(`<b>${esc(it.label)}</b><br>${fmt(it.value, 1)}% share`)}"/>`;
+      g += `<path d="${d}" fill="${color}" stroke="#0B0906" stroke-width="2" data-tt="${esc(`<b>${esc(it.label)}</b><br>${fmt(it.value, 1)}% share`)}"/>`;
       ang = a2;
     });
-    g += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#EDE4D3" font-family="Satoshi,Arial" font-weight="900" font-size="22">${items.length}</text>`;
-    g += `<text x="${cx}" y="${cy + 14}" text-anchor="middle" fill="#94A3B8" font-size="9" font-family="Inter,Arial" letter-spacing="1.4">TRACKED PLAYERS</text>`;
+    g += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#F3ECDD" font-family="Satoshi,Arial" font-weight="900" font-size="22">${items.length}</text>`;
+    g += `<text x="${cx}" y="${cy + 14}" text-anchor="middle" fill="#B9AE9C" font-size="9" font-family="Inter,Arial" letter-spacing="1.4">TRACKED PLAYERS</text>`;
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%">${g}</svg>`;
   };
 }
@@ -464,10 +464,10 @@ function barChart(items, opts = {}) {
 }
 function heatmapHtml(data, weeks, channels) {
   const colr = v => {
-    if (v < .35) return 'rgba(225,29,72,.75)';
-    if (v < .5) return 'rgba(245,158,11,.6)';
-    if (v < .65) return 'rgba(201,168,76,.6)';
-    return `rgba(5,150,105,${.35 + v * .5})`;
+    if (v < .35) return 'rgba(243,236,221,.72)';
+    if (v < .5) return 'rgba(198,161,91,.48)';
+    if (v < .65) return 'rgba(198,161,91,.6)';
+    return `rgba(198,161,91,${.35 + v * .5})`;
   };
   // --heat-cols drives the CSS grid; on phones the label column shrinks and
   // the cells fit the viewport instead of forcing a sideways scroll.
@@ -625,15 +625,15 @@ async function renderDashboard() {
   $('#view').innerHTML = html;
   if (ds) {
     registerChart('dashHistory', lineChart({labels: ds.history.map(h => String(h.year)),
-      series: [{name:'Market size', values: ds.history.map(h => h.value), color:'#C9A84C', area:true}],
+      series: [{name:'Market size', values: ds.history.map(h => h.value), color:'#C6A15B', area:true}],
       unit:'B', decimals:1, fmtY: v => fmt(v, 0)}));
     registerChart('dashShare', donutChart(ds.competitors.map((c, i) => ({label:c.name, value:c.share, color:PALETTE[i % PALETTE.length]}))));
     $('#dashShareLegend').innerHTML = ds.competitors.slice(0, 6).map((c, i) =>
       `<span><i style="background:${PALETTE[i % PALETTE.length]}"></i>${esc(c.name)} · ${fmt(c.share, 1)}%</span>`).join('');
   } else {
     registerChart('dashHistory', lineChart({labels:['2021','2022','2023','2024','2025'],
-      series:[{name:'Market size', values:[0,0,0,0,0], color:'#C9A84C', area:true}], unit:'B', fmtY:v=>fmt(v,0)}));
-    registerChart('dashShare', donutChart([{label:'Awaiting report', value:100, color:'#8C7231'}]));
+      series:[{name:'Market size', values:[0,0,0,0,0], color:'#C6A15B', area:true}], unit:'B', fmtY:v=>fmt(v,0)}));
+    registerChart('dashShare', donutChart([{label:'Awaiting report', value:100, color:'#8C6D2F'}]));
   }
   renderCharts();
 }
@@ -651,7 +651,7 @@ async function renderHistory() {
       <p>Every report is stored with its full agent outputs, sources and exports.</p></div>
       <button class="btn btn-gold btn-sm" data-action="new-report">${icon('spark')} New Report</button></div>
     <div class="composer-row" style="margin-top:0">
-      <div class="field" style="flex:1;min-width:220px"><label>Search reports</label>
+      <div class="field grow-field"><label>Search reports</label>
         <input type="text" id="histSearch" placeholder="Query, company, keyword…" value="${esc(S.histSearch || '')}" /></div>
       <div class="field"><label>Status</label><select id="histStatus"><option value="">All</option><option value="completed">Completed</option><option value="processing">Processing</option><option value="failed">Failed</option></select></div>
       <div class="field"><label>Region</label><select id="histRegion"><option value="">All regions</option>${(S.settings?.regions || []).map(r => `<option>${esc(r)}</option>`).join('')}</select></div>
@@ -663,7 +663,7 @@ async function renderHistory() {
       <div id="histList">${S.reports.length ? `<div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>Query / Subject</th><th>Region</th><th>Period</th><th>Reliability</th><th>Status</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead><tbody>
         ${S.reports.map(r => `<tr><td><label style="display:flex;gap:9px;align-items:center;cursor:pointer">
-          <input type="checkbox" class="hist-check" value="${r.id}" style="width:14px;height:14px;accent-color:#C9A84C"/>
+          <input type="checkbox" class="hist-check" value="${r.id}" style="width:14px;height:14px;accent-color:#C6A15B"/>
           <strong>${esc(r.query)}</strong></label><div class="tiny muted" style="margin-left:23px">${esc(r.company || '')}</div></td>
           <td>${esc(r.region)}</td><td class="mono">${esc(r.period)}</td>
           <td class="num">${r.reliability_score || 0}/100</td>
@@ -723,7 +723,7 @@ async function renderReport() {
       <a class="btn btn-outline btn-sm" href="/api/reports/${r.id}/export/pptx" target="_blank" rel="noopener">${icon('download')} PowerPoint</a>
       <a class="btn btn-outline btn-sm" href="/api/reports/${r.id}/export/excel" target="_blank" rel="noopener">${icon('download')} Excel</a>
       <button class="btn btn-ghost btn-sm" data-action="open-chat">${icon('chat')} Ask follow-up</button>
-      <div class="field" style="margin-left:auto"><label>Translate report</label>
+      <div class="field translate-field"><label>Translate report</label>
         <div style="display:flex;gap:6px"><select id="translateLang">${langOpts}</select>
         <button class="btn btn-ghost btn-sm" data-action="translate">${icon('globe')}</button></div></div>
     </div>
@@ -762,15 +762,15 @@ function renderTab() {
         ${card('Revenue trend', `${esc(sel.name)} vs competitor average · USD B / quarter`,
           `<div class="chart-box tall" id="cRevenue"></div><div class="legend">
           <span data-toggle="0"><i style="background:var(--gold)"></i>${esc(sel.name)}</span>
-          <span data-toggle="1"><i style="background:#4C7BF3"></i>Competitor average</span></div>`)}
+          <span data-toggle="1"><i style="background:#F3ECDD"></i>Competitor average</span></div>`)}
         ${card('Segment mix', 'Share of demand by customer cohort', `<div class="chart-box tall" id="cSegments"></div>`)}
       </div>
       <div class="grid g2" style="margin-bottom:16px">
         ${card('Sentiment heatmap', 'Channel × week · hover for detail',
           `<div class="heat-wrap" id="cHeat" style="position:relative"></div>
-           <div class="legend"><span><i style="background:rgba(225,29,72,.75)"></i>Negative</span>
-           <span><i style="background:rgba(201,168,76,.6)"></i>Neutral</span>
-           <span><i style="background:rgba(5,150,105,.7)"></i>Positive</span></div>`)}
+           <div class="legend"><span><i style="background:rgba(243,236,221,.72)"></i>Negative</span>
+           <span><i style="background:rgba(198,161,91,.6)"></i>Neutral</span>
+           <span><i style="background:rgba(198,161,91,.85)"></i>Positive</span></div>`)}
         ${card('Macro indicators', `Economic backdrop · ${esc(ds.region)}`, `<div class="chart-box tall" id="cMacro"></div>`)}
       </div>
       <div class="grid g2">
@@ -785,14 +785,14 @@ function renderTab() {
           </tbody></table></div>`)}
       </div>`;
     registerChart('cHistory', lineChart({labels: ds.history.map(h => String(h.year)),
-      series:[{name:'Market size', values:ds.history.map(h=>h.value), color:'#C9A84C', area:true}],
+      series:[{name:'Market size', values:ds.history.map(h=>h.value), color:'#C6A15B', area:true}],
       unit:'B', decimals:1, fmtY:v=>fmt(v,0)}));
     registerChart('cShare', donutChart(ds.competitors.map((c,i)=>({label:c.name,value:c.share,color:PALETTE[i%PALETTE.length]}))));
     $('#cShareLegend').innerHTML = ds.competitors.map((c,i)=>
       `<span><i style="background:${PALETTE[i%PALETTE.length]}"></i>${esc(c.name)} · ${fmt(c.share,1)}%</span>`).join('');
     registerChart('cRevenue', lineChart({labels:ds.quarters.map(q=>q.label),
-      series:[{name:sel.name, values:ds.quarters.map(q=>q.revenue), color:'#C9A84C', area:true},
-              {name:'Competitor average', values:ds.quarters.map(q=>q.competitor_avg), color:'#4C7BF3', dots:false}],
+      series:[{name:sel.name, values:ds.quarters.map(q=>q.revenue), color:'#C6A15B', area:true},
+              {name:'Competitor average', values:ds.quarters.map(q=>q.competitor_avg), color:'#F3ECDD', dots:false}],
       unit:'B', decimals:1, fmtY:v=>fmt(v,0)}));
     registerChart('cSegments', barChart(ds.segments.map((s,i)=>({label:s.name,value:s.value,color:PALETTE[i]})), {unit:'%', labelWidth:110}));
     // A tooltip host makes heatmap cells tappable on phones (bindTooltips).
@@ -824,16 +824,16 @@ function renderTab() {
           <span data-toggle="1"><i style="background:var(--gold)"></i>Base</span>
           <span data-toggle="0"><i style="background:var(--success)"></i>Optimistic</span>
           <span data-toggle="2"><i style="background:var(--danger)"></i>Pessimistic</span>
-          <span><i style="background:rgba(139,124,246,.4)"></i>Confidence band</span></div>` +
+          <span><i style="background:rgba(243,236,221,.28)"></i>Confidence band</span></div>` +
         `<div class="tbl-wrap" style="margin-top:18px"><table class="tbl"><thead><tr><th>Month</th><th>Base</th><th>Optimistic</th><th>Pessimistic</th><th>Confidence</th></tr></thead><tbody>
         ${series.map(x=>`<tr><td class="mono">${esc(x.month)}</td><td class="num">${fmt(x.base,1)}</td>
         <td class="num">${fmt(x.optimistic,1)}</td><td class="num">${fmt(x.pessimistic,1)}</td>
         <td class="num">${fmt(x.confidence*100,0)}%</td></tr>`).join('')}</tbody></table></div>`)}
     </div>`;
     registerChart('cForecast', lineChart({labels:series.map(x=>x.month.slice(2)),
-      series:[{name:'Optimistic',values:series.map(x=>x.optimistic),color:'#059669',dots:false},
-              {name:'Base',values:series.map(x=>x.base),color:'#C9A84C'},
-              {name:'Pessimistic',values:series.map(x=>x.pessimistic),color:'#E11D48',dots:false}],
+      series:[{name:'Optimistic',values:series.map(x=>x.optimistic),color:'#E7CE8C',dots:false},
+              {name:'Base',values:series.map(x=>x.base),color:'#C6A15B'},
+              {name:'Pessimistic',values:series.map(x=>x.pessimistic),color:'#F3ECDD',dots:false}],
       band:{upper:series.map(x=>x.optimistic),lower:series.map(x=>x.pessimistic)},
       unit:'B', decimals:1, fmtY:v=>fmt(v,0)}));
   } else if (S.tab === 'verify') {
@@ -912,7 +912,7 @@ async function renderCompare() {
       ${card('Market size & growth', 'Side-by-side trajectories',
         `<div class="chart-box tall" id="cmpChart"></div><div class="legend">
         <span data-toggle="0"><i style="background:var(--gold)"></i>${esc(a)}</span>
-        <span data-toggle="1"><i style="background:#4C7BF3"></i>${esc(b)}</span></div>`)}
+        <span data-toggle="1"><i style="background:#F3ECDD"></i>${esc(b)}</span></div>`)}
     </div>
     <div class="grid g2">${[a,b].map((name,i)=>{const x=i?c.dataset_b:c.dataset_a;return card(esc(name), 'Strategic profile',
       `<p class="small muted">${esc(x?.sector || '')} · ${esc(x?.region || '')}</p>
@@ -939,8 +939,8 @@ async function renderCompare() {
   $('#view').innerHTML = html;
   if (c && c.metrics) {
     registerChart('cmpChart', lineChart({labels:c.dataset_a.history.map(h=>String(h.year)),
-      series:[{name:c.company_a,values:c.dataset_a.history.map(h=>h.value),color:'#C9A84C',area:true},
-              {name:c.company_b,values:c.dataset_b.history.map(h=>h.value),color:'#4C7BF3',dots:false}],
+      series:[{name:c.company_a,values:c.dataset_a.history.map(h=>h.value),color:'#C6A15B',area:true},
+              {name:c.company_b,values:c.dataset_b.history.map(h=>h.value),color:'#F3ECDD',dots:false}],
       unit:'B', decimals:1, fmtY:v=>fmt(v,0)}));
   }
   renderCharts();
@@ -999,7 +999,7 @@ async function loadOpenRouterModels(refresh = false) {
       <div class="or-list">${top || '<p class="small muted">No live catalogue right now — OpenRouter\'s own free router is used. Free models are still selected automatically.</p>'}</div>
       <p class="tiny muted">Ranked by context window, output length, structured-output support, tool support
       and freshness. OpenRouter sees an all-free fallback chain, so a retired or rate-limited model is
-      replaced automatically — never by a paid one. ${d.error ? 'Catalogue note: ' + esc(d.error) : ''}
+      replaced automatically — never by a paid one. ${d.error ? 'The live catalogue is temporarily unavailable, so the built-in free router remains active.' : ''}
       Last checked ${esc((d.fetched_at || '').replace('T', ' ').slice(0, 16))} UTC.</p>`;
   } catch (e) {
     S.orModels = [];
@@ -1028,7 +1028,7 @@ async function renderSettings() {
       <span class="badge ${p.configured_count ? 'ok' : 'warn'}"><i></i>${p.configured_count} / ${p.slots.length} configured</span></div>
     <div class="composer-row" style="margin-top:0">
       <div class="field"><label>Provider</label><select id="allProvider">${optgroups}</select></div>
-      <div class="field" style="flex:1;min-width:200px"><label>API key</label><input type="password" id="allKey" placeholder="Paste your API key" /></div>
+      <div class="field grow-field"><label>API key</label><input type="password" id="allKey" placeholder="Paste your API key" /></div>
       <button class="btn btn-gold" data-action="apply-all">${icon('key')} Apply to all ${p.slots.length} slots</button>
     </div>
   </div>
@@ -1036,23 +1036,38 @@ async function renderSettings() {
     <div class="card-head"><div><span class="eyebrow">OPENROUTER · ZERO COST</span>
       <h3>Auto-select the best available free model</h3>
       <p>Choose <b>Auto — best free model (live)</b> as the model on any OpenRouter (Free) slot.
-      Meridian reads OpenRouter's live catalogue, ranks the currently free chat models and retries
-      on an all-free fallback chain. No paid model is ever used.</p></div>
+      Meridian reads OpenRouter's live catalogue, ranks only explicit <b>:free</b> chat models and retries
+      on an all-free fallback chain. $0 previews that can require a funded account are excluded.</p></div>
       <span class="badge gold"><i></i>AUTO</span></div>
     <div id="orAutoBody" class="or-body"><span class="spinner"></span> Checking the live free catalogue…</div>
+    <div class="or-help"><b>Seeing HTTP 402?</b><span>That is OpenRouter's billing gate, not a broken
+      Meridian key field. Confirm the key is from the intended OpenRouter account, remove any per-key
+      credit cap and check for a negative balance. A genuine <b>:free</b> model normally needs no credit
+      purchase; if this account still blocks free calls, use a free Groq or Gemini key.</span></div>
   </section>
   ${sectionTitle('Independent agent key slots')}
   <div class="grid g2" id="slotGrid">`;
   p.slots.forEach(s => {
     const spec = p.providers.find(x => x.key === s.provider);
-    const models = spec?.models || [];
+    const stateBadge = s.key_error
+      ? '<span class="badge bad slot-state-badge"><i></i>KEY UNREADABLE</span>'
+      : !s.configured ? '<span class="badge mute slot-state-badge"><i></i>NO KEY</span>'
+      : s.last_test_ok === true ? '<span class="badge ok slot-state-badge"><i></i>WORKING · TESTED</span>'
+      : s.last_test_ok === false ? '<span class="badge warn slot-state-badge"><i></i>SAVED · TEST FAILED</span>'
+      : '<span class="badge gold slot-state-badge"><i></i>SAVED · NOT TESTED</span>';
+    const resultText = s.key_error
+      ? 'This stored key can no longer be decrypted. Paste the key again and save.'
+      : s.configured && s.last_test_ok === false
+        ? 'Saved and encrypted, but the last live connection test failed. Fix the provider issue below, then test again.'
+        : s.configured ? `Encrypted at rest · ${esc(s.model_label || s.model || 'default model')}`
+        : 'No key saved. This slot can borrow another active provider; if none exists, answers stay disabled.';
     html += `<section class="card slot-card" data-slot="${esc(s.slot)}">
       <div class="slot-head"><div class="slot-ico">${s.icon}</div>
-        <div style="flex:1"><b>${esc(s.name)}${s.slot==='translator'?' <span class="badge mute">optional</span>':''}</b>
+        <div class="slot-title"><b>${esc(s.name)}${s.slot==='translator'?' <span class="badge mute">optional</span>':''}</b>
         <small>${esc(s.description)}</small></div>
-        <span class="badge ${s.configured ? 'ok' : 'mute'}"><i></i>${s.configured ? 'CONFIGURED' : 'NO KEY'}</span></div>
-      ${s.configured ? `<div class="saved-key" style="margin-bottom:14px"><span>${esc(s.masked_key)} · ${esc(spec?.label || s.provider)}</span>
-        <span>${s.last_test_ok === true ? '✓ tested' : s.last_test_ok === false ? '⚠ test failed' : 'not tested'}</span></div>` : ''}
+        ${stateBadge}</div>
+      ${s.configured || s.key_error ? `<div class="saved-key ${s.last_test_ok === false || s.key_error ? 'test-failed' : ''}"><span class="saved-key-main">${esc(s.masked_key)} · ${esc(spec?.label || s.provider)}</span>
+        <span class="saved-key-state">${s.key_error ? 're-enter key' : s.last_test_ok === true ? '✓ tested' : s.last_test_ok === false ? '⚠ test failed' : 'not tested'}</span></div>` : ''}
       <div class="slot-grid">
         <div class="field"><label>Provider</label><select class="s-provider">${optgroups}</select></div>
         <div class="field"><label>Model</label><select class="s-model">${modelOptions(spec, s.model)}</select></div>
@@ -1065,7 +1080,7 @@ async function renderSettings() {
         <button class="btn btn-outline btn-sm" data-action="test-key">${icon('refresh')} Test connection</button>
         <button class="btn btn-ghost btn-sm" data-action="delete-key">${icon('trash')}</button>
       </div>
-      <div class="slot-result tiny muted" style="margin-top:10px">${s.configured ? `Encrypted at rest · ${esc(s.model_label || s.model || 'default model')}` : 'No key saved. This slot can borrow another active provider; if none exists, answers stay disabled.'}</div>
+      <div class="slot-result tiny muted">${esc(resultText)}</div>
       <div style="margin-top:10px"><a class="tiny" id="signup-${s.slot}" href="#" target="_blank" rel="noopener">Get a free key ↗</a></div>
     </section>`;
   });
@@ -1087,10 +1102,19 @@ async function renderSettings() {
     const s = p.slots.find(x => x.slot === cardEl.dataset.slot);
     const provSel = $('.s-provider', cardEl), modelSel = $('.s-model', cardEl);
     if (s?.provider) provSel.value = s.provider;
+    let initialSync = true;
     const sync = () => {
       const spec = p.providers.find(x => x.key === provSel.value);
-      modelSel.innerHTML = modelOptions(spec, s?.model);
-      if (s?.model && spec?.models.includes(s.model)) modelSel.value = s.model;
+      // On first render preserve the saved model — including a live pinned
+      // :free model that is not in the provider's short static list. When
+      // the user changes provider, start from that provider's default rather
+      // than carrying an incompatible model across providers.
+      const wanted = initialSync ? s?.model : spec?.default_model;
+      modelSel.innerHTML = modelOptions(spec, wanted);
+      if (wanted && [...modelSel.options].some(o => o.value === wanted)) {
+        modelSel.value = wanted;
+      }
+      initialSync = false;
       const link = $('#signup-' + cardEl.dataset.slot);
       link.href = spec?.signup_url || '#';
     };
@@ -1101,8 +1125,8 @@ async function renderSettings() {
 }
 
 function renderGuide() {
-  $('#view').innerHTML = `<div class="hero" style="padding:32px 36px">
-    <div class="hero-eyebrow">Documentation</div><h1 style="font-size:32px">The Meridian <span>User Guide</span></h1>
+  $('#view').innerHTML = `<div class="hero hero-compact">
+    <div class="hero-eyebrow">Documentation</div><h1>The Meridian <span>User Guide</span></h1>
     <p class="hero-sub">Everything you need to go from a single question to a verified, exportable market report.</p></div>
   <div class="grid g2">
     ${card('1 · Generate a report', 'Start from the Dashboard', `<div class="md">
@@ -1283,7 +1307,8 @@ document.addEventListener('click', async (ev) => {
     else if (a === 'save-key') {
       const c = t.closest('.slot-card'), slot = c.dataset.slot;
       const key = $('.s-key', c).value.trim();
-      if (!key) { toast('Enter an API key first (or leave the slot unconfigured)', 'err'); return; }
+      const saved = S.settings?.slots?.find(x => x.slot === slot);
+      if (!key && !saved?.configured) { toast('Enter an API key first (or leave the slot unconfigured)', 'err'); return; }
       await api('/api/settings/keys', {method:'POST', body:{slot, provider:$('.s-provider', c).value,
         api_key:key, model:$('.s-model', c).value}});
       $('.slot-result', c).textContent = '✓ Saved and encrypted with Fernet.';
@@ -1291,11 +1316,28 @@ document.addEventListener('click', async (ev) => {
     }
     else if (a === 'test-key') {
       const c = t.closest('.slot-card'), slot = c.dataset.slot, out = $('.slot-result', c);
+      const slotState = S.settings?.slots?.find(x => x.slot === slot);
       out.innerHTML = '<span class="spinner"></span> Testing live connection…';
       const r = await api('/api/settings/keys/test', {method:'POST', body:{slot}});
-      if (r.ok) { out.innerHTML = `✓ ${esc(r.provider)} responded in ${r.latency_ms} ms · ${esc(r.model)}${r.quota ? ' · quota headers received' : ''}`;
-                  toast(`${r.provider} connection successful`, 'ok'); }
-      else { out.textContent = `⚠ ${r.error}`; toast(r.error, 'err', 7000); }
+      if (slotState) slotState.last_test_ok = !!r.ok;
+      const saved = $('.saved-key', c), savedState = $('.saved-key-state', c);
+      if (saved) saved.classList.toggle('test-failed', !r.ok);
+      if (savedState) savedState.textContent = r.ok ? '✓ tested' : '⚠ test failed';
+      const badge = $('.slot-state-badge', c);
+      if (badge) {
+        badge.className = `badge slot-state-badge ${r.ok ? 'ok' : 'warn'}`;
+        badge.innerHTML = `<i></i>${r.ok ? 'WORKING · TESTED' : 'SAVED · TEST FAILED'}`;
+      }
+      if (r.ok) {
+        out.innerHTML = `✓ ${esc(r.provider)} responded in ${r.latency_ms} ms · ${esc(r.model)}${r.quota ? ' · quota headers received' : ''}${r.inherited ? ' · tested through the inherited Writer key' : ''}`;
+        toast(`${r.provider} connection successful`, 'ok');
+      } else {
+        // One concise explanation in the slot; the toast only points to it.
+        // This prevents the repeated raw-error wall shown in the bug report.
+        out.textContent = `⚠ ${r.error || 'Connection failed.'}`;
+        toast(`${r.provider || 'Provider'} test failed — see the ${slot} slot for the next step`, 'err', 5200);
+      }
+      await refreshChrome();
     }
     else if (a === 'delete-key') {
       const c = t.closest('.slot-card'), slot = c.dataset.slot;
@@ -1319,10 +1361,16 @@ document.addEventListener('click', async (ev) => {
   } catch (e) { toast(e.message, 'err', 6500); }
 });
 $('#chatForm')?.addEventListener('submit', async (ev) => { ev.preventDefault(); await sendChat($('#chatInput').value); });
-$('#chatFab')?.addEventListener('click', () => openChat());
+// The chat FAB is handled once by the delegated [data-action="open-chat"]
+// handler above; a second direct listener made every click open/fetch twice.
 window.addEventListener('hashchange', () => {
   const h = location.hash.replace(/^#\/?/, '');
-  if (h.startsWith('report/') && S.view !== 'report') navigate('report', h.split('/')[1]);
+  if (h.startsWith('report/')) {
+    const id = h.split('/')[1];
+    if (id && (S.view !== 'report' || S.reportId !== id)) navigate('report', id);
+  } else if (['history', 'compare', 'settings', 'guide', 'dashboard'].includes(h)) {
+    if (S.view !== h) navigate(h);
+  } else if (!h && S.view !== 'dashboard') navigate('dashboard');
 });
 
 /* ---------------------------------------------------------------- Boot --- */

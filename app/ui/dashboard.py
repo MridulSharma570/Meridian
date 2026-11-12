@@ -96,7 +96,7 @@ def render() -> None:
         c1, c2, c3 = st.columns([4, 1.2, 1])
         with c1:
             st.markdown(f"**{r['query']}**  \n"
-                        f"<span style='color:#64748B;font-size:11px;font-family:JetBrains Mono'>"
+                        f"<span style='color:#8F8474;font-size:11px;font-family:JetBrains Mono'>"
                         f"{r['region']} · {r['period']} · {r['created_at'][:16]}</span>",
                         unsafe_allow_html=True)
         with c2:

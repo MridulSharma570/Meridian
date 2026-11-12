@@ -10,6 +10,7 @@ time against OpenRouter's live free catalogue; see
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -28,7 +29,28 @@ _SENSITIVE = re.compile(r"(sk-[A-Za-z0-9_\-]{6,}|AIza[A-Za-z0-9_\-]{6,}|gsk_[A-Z
 
 
 class LLMError(RuntimeError):
-    """Raised when a provider call fails. Message is always key-safe."""
+    """Raised when a provider call fails. Message is always key-safe.
+
+    The optional structured fields let Settings show one short, actionable
+    explanation instead of dumping a provider's raw JSON response into a
+    toast. ``str(error)`` remains safe to display anywhere.
+    """
+
+    def __init__(self, message: str, *, status: Optional[int] = None,
+                 category: str = "provider_error", action: str = "",
+                 provider_message: str = ""):
+        super().__init__(message)
+        self.status = status
+        self.category = category
+        self.action = action
+        self.provider_message = provider_message
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "error": str(self), "status": self.status,
+            "category": self.category, "action": self.action,
+            "provider_message": self.provider_message or None,
+        }
 
 
 def _safe(text: str) -> str:
@@ -147,15 +169,118 @@ def _extract(p: Provider, data: Dict[str, Any]) -> str:
     raise LLMError(f"{p.label} returned no completion text")
 
 
-def _error_for_status(p: Provider, status: int, detail: str) -> LLMError:
-    hint = ""
+def _provider_error_payload(detail: Any) -> Dict[str, Any]:
+    """Extract the useful fields from a provider error without exposing JSON."""
+    if isinstance(detail, dict):
+        payload = detail
+    else:
+        try:
+            payload = json.loads(str(detail))
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(payload, dict):
+        return {}
+    error = payload.get("error") if isinstance(payload.get("error"), dict) else payload
+    if not isinstance(error, dict):
+        return {}
+    metadata = error.get("metadata") if isinstance(error.get("metadata"), dict) else {}
+    return {
+        "message": str(error.get("message") or "")[:240],
+        "code": str(error.get("code") or payload.get("code") or ""),
+        "limit_source": str(metadata.get("limit_source") or ""),
+        "remedy_hint": str(metadata.get("remedy_hint") or "")[:240],
+    }
+
+
+def _clean_provider_message(message: str) -> str:
+    """One-line provider wording, with credentials and JSON syntax removed."""
+    text = _safe(message).replace("\n", " ").strip()
+    text = re.sub(r"\s+", " ", text)
+    return text[:180].rstrip(" .")
+
+
+def _error_for_status(p: Provider, status: int, detail: Any) -> LLMError:
+    """Translate an HTTP failure into a short cause + next step.
+
+    Raw provider bodies are deliberately *not* included: OpenRouter returns
+    nested billing JSON for HTTP 402, and rendering it verbatim made every
+    Settings slot look broken in a different way. The parsed provider message
+    is retained separately for diagnostics, capped and credential-redacted.
+    """
+    info = _provider_error_payload(detail)
+    provider_message = _clean_provider_message(info.get("message", ""))
+    limit_source = info.get("limit_source", "")
+    is_or_free = p.key == "openrouter_free"
+
+    if status == 402:
+        if is_or_free and limit_source in {"openrouter_credits", "org_credits",
+                                           "user_credits", "key_credits", ""}:
+            title = "OpenRouter stopped this free request at a billing check (HTTP 402)"
+            action = (
+                "Meridian now sends only models whose IDs end in :free. Check that this "
+                "key belongs to the intended OpenRouter account/organisation, remove or "
+                "raise any per-key credit limit, and make sure the account balance is not "
+                "negative. A :free model does not normally require buying credits; if "
+                "OpenRouter still blocks this account, use a free Groq or Gemini key instead."
+            )
+            category = "openrouter_credit_gate"
+        elif is_or_free:
+            title = "OpenRouter rejected the request size or credit reservation (HTTP 402)"
+            action = (
+                "Retry with Auto — best free model (live). Meridian's connection test already "
+                "uses a tiny prompt; if the same 402 persists, check the key's credit limit "
+                "or use a free Groq or Gemini key."
+            )
+            category = "openrouter_request_limit"
+        else:
+            title = f"{p.label} requires payment or more credit (HTTP 402)"
+            action = "Add credit to that provider account, raise the key's spending limit, or choose another provider."
+            category = "payment_required"
+        return LLMError(f"{title}. {action}", status=status, category=category,
+                        action=action, provider_message=provider_message)
+
     if status in (401, 403):
-        hint = " — check that the key is valid and has not expired"
-    elif status == 429:
-        hint = " — rate limit or quota exhausted; try a free provider"
-    elif status in (404, 410):
-        hint = " — this model may have been retired; try the Auto free-model option"
-    return LLMError(f"{p.label} HTTP {status}{hint}. {_safe(detail)}")
+        action = ("Check that the key was copied completely, belongs to this provider, "
+                  "is active, and has access to the selected model.")
+        return LLMError(f"{p.label} rejected this API key (HTTP {status}). {action}",
+                        status=status, category="authentication", action=action,
+                        provider_message=provider_message)
+    if status == 429:
+        if is_or_free:
+            action = ("OpenRouter's free pool is rate-limited for now (free variants are "
+                      "capped per minute and per day). Wait a few minutes, choose Auto — "
+                      "best free model, or use a free Groq/Gemini key.")
+        else:
+            action = "The provider's rate limit or quota is exhausted. Wait, reduce usage, or choose another provider."
+        return LLMError(f"{p.label} is rate-limited (HTTP 429). {action}",
+                        status=status, category="rate_limit", action=action,
+                        provider_message=provider_message)
+    if status in (404, 410):
+        action = ("That model is unavailable or retired. For OpenRouter (Free), choose "
+                  "Auto — best free model (live); otherwise select a current model.")
+        return LLMError(f"{p.label} could not find the selected model (HTTP {status}). {action}",
+                        status=status, category="model_unavailable", action=action,
+                        provider_message=provider_message)
+    if status == 400:
+        action = ("The provider rejected the request shape or parameters. Choose Auto — "
+                  "best free model for OpenRouter (Free), or a standard model for this provider.")
+        return LLMError(f"{p.label} rejected the request (HTTP 400). {action}",
+                        status=status, category="bad_request", action=action,
+                        provider_message=provider_message)
+    if status >= 500:
+        action = "The provider is temporarily unavailable. Wait briefly and test again, or use another configured provider."
+        return LLMError(f"{p.label} is temporarily unavailable (HTTP {status}). {action}",
+                        status=status, category="provider_unavailable", action=action,
+                        provider_message=provider_message)
+
+    action = "Check the selected provider and model, then test again."
+    if provider_message:
+        return LLMError(f"{p.label} HTTP {status}: {provider_message}. {action}",
+                        status=status, category="provider_error", action=action,
+                        provider_message=provider_message)
+    return LLMError(f"{p.label} HTTP {status}. {action}", status=status,
+                    category="provider_error", action=action,
+                    provider_message=provider_message)
 
 
 # Errors for which another *free* model may legitimately succeed. Auth errors
@@ -245,8 +370,9 @@ def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
         except ValueError as exc:
             raise LLMError(f"{p.label} returned non-JSON response") from exc
         if isinstance(data, dict) and data.get("error"):
-            err = LLMError(f"{p.label}: {_safe(str(data['error'])[:300])}")
-            if auto and attempt < attempts - 1:
+            err = _error_for_status(p, resp.status_code if resp.status_code >= 400 else 502,
+                                    data)
+            if auto and attempt < attempts - 1 and err.status in _RETRYABLE:
                 openrouter_auto.note_failure(chosen, 502)
                 avoid.add(chosen)
                 last_error = err
@@ -313,10 +439,28 @@ def test_connection(slot: str, timeout: float = 12.0) -> Dict[str, Any]:
                           "Reply with exactly: OK", max_tokens=12, temperature=0,
                           timeout=timeout)
         quota = result["quota_headers"] or None
-        queries.update_key_test(actual, True, quota)
+        try:
+            queries.update_key_test(actual, True, quota)
+        except Exception:
+            logger.warning("Could not persist successful key test for %s", actual)
         return {"ok": True, "slot": slot, "provider": result["provider"],
                 "model": result["model"], "latency_ms": result["latency_ms"],
                 "quota": quota, "inherited": actual != slot}
+    except LLMError as exc:
+        try:
+            queries.update_key_test(actual, False)
+        except Exception:
+            logger.warning("Could not persist failed key test for %s", actual)
+        return {"ok": False, "slot": slot, "tested_slot": actual,
+                "inherited": actual != slot, **exc.as_dict()}
     except Exception as exc:
-        queries.update_key_test(actual, False)
-        return {"ok": False, "slot": slot, "error": str(exc)}
+        try:
+            queries.update_key_test(actual, False)
+        except Exception:
+            logger.warning("Could not persist failed key test for %s", actual)
+        message = _safe(exc)[:240] or "The connection test failed"
+        return {"ok": False, "slot": slot, "tested_slot": actual,
+                "inherited": actual != slot, "error": message,
+                "status": None, "category": "connection_error",
+                "action": "Check the provider status and test again.",
+                "provider_message": None}

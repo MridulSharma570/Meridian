@@ -22,14 +22,14 @@ from app.config import settings
 
 logger = logging.getLogger("meridian.export.pdf")
 
-NAVY = colors.HexColor("#0A1628")
-NAVY2 = colors.HexColor("#111C32")
-GOLD = colors.HexColor("#C9A84C")
-IVORY = colors.HexColor("#EDE4D3")
-SLATE = colors.HexColor("#64748B")
-LIGHT = colors.HexColor("#F8FAFC")
-GREEN = colors.HexColor("#059669")
-RED = colors.HexColor("#E11D48")
+NAVY = colors.HexColor("#0B0906")
+NAVY2 = colors.HexColor("#17120D")
+GOLD = colors.HexColor("#C6A15B")
+IVORY = colors.HexColor("#F3ECDD")
+SLATE = colors.HexColor("#8F8474")
+LIGHT = colors.HexColor("#F3ECDD")
+GREEN = colors.HexColor("#C6A15B")
+RED = colors.HexColor("#F3ECDD")
 
 
 def _styles():
@@ -51,7 +51,7 @@ def _styles():
         "cell": ParagraphStyle("MeridianCell", parent=ss["Normal"], fontName="Helvetica",
                                fontSize=7.8, leading=10, textColor=NAVY2),
         "cellh": ParagraphStyle("MeridianCellH", parent=ss["Normal"], fontName="Helvetica-Bold",
-                                fontSize=8, leading=10, textColor=colors.white),
+                                fontSize=8, leading=10, textColor=colors.HexColor("#F3ECDD")),
         "center": ParagraphStyle("MeridianCenter", parent=ss["Normal"],
                                  fontName="Helvetica", fontSize=9, alignment=TA_CENTER,
                                  textColor=SLATE),
@@ -63,7 +63,7 @@ def _clean(text: str) -> str:
     t = html.escape(text or "")
     t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
     t = re.sub(r"\*(.+?)\*", r"<i>\1</i>", t)
-    t = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<link href="\2" color="#C9A84C">\1</link>', t)
+    t = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<link href="\2" color="#C6A15B">\1</link>', t)
     t = t.replace("&lt;br&gt;", "<br/>")
     return t
 
@@ -74,9 +74,9 @@ def _table(data: List[List[Any]], st, widths: List[float] | None = None) -> Tabl
     t = Table(body, colWidths=widths, repeatRows=1, hAlign="LEFT")
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#F4F6FA"), colors.white]),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE3ED")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#F3ECDD")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#F3ECDD"), colors.HexColor("#E7CE8C")]),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCC38E")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 5),
@@ -110,10 +110,10 @@ def _share_pie(competitors: List[dict]) -> Drawing:
     pie.x, pie.y, pie.width, pie.height = 20, 12, 120, 120
     pie.data = [c["share"] for c in competitors[:6]]
     pie.labels = [c["name"][:14] for c in competitors[:6]]
-    pie.slices.strokeColor = colors.white
+    pie.slices.strokeColor = colors.HexColor("#F3ECDD")
     pie.slices.strokeWidth = 1
-    palette = [GOLD, NAVY2, colors.HexColor("#8B7CF6"), GREEN,
-               colors.HexColor("#4C7BF3"), SLATE]
+    palette = [GOLD, NAVY2, colors.HexColor("#F3ECDD"), GREEN,
+               colors.HexColor("#E7CE8C"), SLATE]
     # NOTE: pie.slices is a TypedPropertyCollection whose __getitem__ always
     # succeeds — iterating it directly never terminates. Index by a fixed range.
     for i in range(len(pie.data)):
@@ -148,7 +148,7 @@ def generate_pdf(report: Dict[str, Any], out_path: str | Path) -> str:
         canvas.setFillColor(IVORY)
         canvas.setFont("Helvetica", 8)
         canvas.drawRightString(w_ - 18 * mm, h_ - 12 * mm, "MARKET INTELLIGENCE, REDEFINED.")
-        canvas.setStrokeColor(colors.HexColor("#DCE3ED"))
+        canvas.setStrokeColor(colors.HexColor("#DCC38E"))
         canvas.line(18 * mm, 14 * mm, w_ - 18 * mm, 14 * mm)
         canvas.setFillColor(SLATE)
         canvas.setFont("Helvetica", 7.5)

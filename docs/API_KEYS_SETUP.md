@@ -60,9 +60,11 @@ Meridian calls Gemini through its OpenAI-compatible endpoint.
 - Meridian queries the public `GET https://openrouter.ai/api/v1/models`
   catalogue. This call needs **no API key** and consumes no credits. The
   ranked list is cached for 15 minutes (`MERIDIAN_OPENROUTER_CATALOG_TTL`).
-- Only currently **zero-price**, text-in/text-out models served by
-  `/chat/completions` are kept. Paid models, embeddings, image/audio models,
-  routers and expired previews are discarded.
+- Only currently explicit **`:free`**, text-in/text-out models served by
+  `/chat/completions` are kept, and every published price field must be zero.
+  Paid models, $0 previews without the `:free` suffix, embeddings, image/audio
+  models, routers and expired models are discarded. This matters because a
+  $0 preview can still require a funded OpenRouter account.
 - Candidates are ranked by context window, maximum output tokens, structured
   output (JSON) support, tool support, published Artificial Analysis benchmark
   scores, freshness and a penalty for very small or preview models. The top one
@@ -73,7 +75,8 @@ Meridian calls Gemini through its OpenAI-compatible endpoint.
   down for five minutes and forces a catalogue refresh on 404/410.
 - A hard requirement: **no paid model is ever used**. `openrouter/auto` is
   deliberately not used because it can select a billable model. Paid fallbacks
-  are never added, and `save_key()` rejects non-`:free` slugs on this provider.
+  are never added; an unsafe non-`:free` value saved for this provider is
+  upgraded to Auto instead of being sent upstream.
 
 **Other choices in the model dropdown**
 
@@ -98,16 +101,23 @@ Meridian calls Gemini through its OpenAI-compatible endpoint.
 
 Older Meridian releases hard-coded `meta-llama/llama-3-8b-instruct:free` and
 `mistralai/mistral-7b-instruct:free`; both have been retired upstream. Saved
-keys using either slug are transparently upgraded to Auto on read, so no
-manual migration is needed. Check your remaining credits at
-https://openrouter.ai/activity.
+keys using either slug — or an unsafe $0 preview without `:free` — are
+transparently upgraded to Auto on read, so no manual migration is needed.
+
+**HTTP 402 on a free slot:** OpenRouter blocked the request at an account or
+key billing gate. It does not mean every `:free` model requires a purchase.
+Confirm the key belongs to the intended account/organisation, remove or raise
+any per-key credit limit, and check for a negative balance. If OpenRouter
+still blocks the account, use a free Groq or Gemini key. Meridian shows this
+as one concise Settings message and marks the slot **SAVED · TEST FAILED**;
+a saved key is not presented as working until a test succeeds.
 
 ### 4. Hugging Face
 1. Create an account → **https://huggingface.co/settings/tokens**.
 2. New token, **Read** scope, copy `hf_…`.
 3. Choose `Hugging Face` and `Qwen/Qwen2.5-72B-Instruct`.
-Note: cold model starts can take 20–60 s; Meridian falls back to the local
-engine if the request times out.
+Note: cold model starts can take 20–60 s. If the request times out, Meridian
+returns an actionable error; it does not substitute a local/template answer.
 
 ### 5. Cohere (Trial)
 1. **https://dashboard.cohere.com/api-keys** → sign up → copy the trial key.

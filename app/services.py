@@ -467,16 +467,17 @@ def compare_reports(report_a: str, report_b: str) -> Dict[str, Any]:
 # Settings API
 # --------------------------------------------------------------------------- #
 def settings_payload() -> Dict[str, Any]:
+    slots = key_manager.key_status()
     return {
         "providers": list_providers(),
-        "slots": key_manager.key_status(),
+        "slots": slots,
         "languages": [{"code": c, "name": n, "native": nat}
                       for c, n, nat in SUPPORTED_LANGUAGES],
         "regions": list(REGIONS), "periods": list(PERIODS),
         "encryption": "Fernet (AES-128-CBC + HMAC-SHA256)",
         "demo_mode": answer_policy.sample_mode(),
         "readiness": answer_policy.readiness(),
-        "configured_count": sum(1 for s in key_manager.key_status() if s["configured"]),
+        "configured_count": sum(1 for s in slots if s["configured"]),
     }
 
 

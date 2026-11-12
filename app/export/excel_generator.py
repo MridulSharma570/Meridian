@@ -15,18 +15,18 @@ from app.config import settings
 
 logger = logging.getLogger("meridian.export.excel")
 
-NAVY = "0A1628"
-CARD = "1A2744"
-GOLD = "C9A84C"
-IVORY = "EDE4D3"
-SLATE = "64748B"
-WHITE = "F8FAFC"
-GREEN = "059669"
+NAVY = "0B0906"
+CARD = "211A13"
+GOLD = "C6A15B"
+IVORY = "F3ECDD"
+SLATE = "8F8474"
+WHITE = "F3ECDD"
+GREEN = "C6A15B"
 
 HEAD_FILL = PatternFill("solid", fgColor=NAVY)
-ALT_FILL = PatternFill("solid", fgColor="F1F4F9")
+ALT_FILL = PatternFill("solid", fgColor="F3ECDD")
 GOLD_FILL = PatternFill("solid", fgColor=GOLD)
-THIN = Side(style="thin", color="DCE3ED")
+THIN = Side(style="thin", color="DCC38E")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
 
@@ -160,7 +160,7 @@ def generate_excel(report: Dict[str, Any], out_path: str | Path) -> str:
                               max_row=len(series) + 1), titles_from_data=True)
         ch.set_categories(Reference(ws, min_col=1, min_row=2, max_row=len(series) + 1))
         ch.height, ch.width = 9, 18
-        for colour, s in zip((GOLD, GREEN, "E11D48"), ch.series):
+        for colour, s in zip((GOLD, GREEN, "F3ECDD"), ch.series):
             s.graphicalProperties.line.solidFill = colour
             s.graphicalProperties.line.width = 24000
         ws.add_chart(ch, "G2")
