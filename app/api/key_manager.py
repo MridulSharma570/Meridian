@@ -7,6 +7,8 @@ except through :func:`get_credentials`, which is used only by the LLM router.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -23,14 +25,31 @@ logger = logging.getLogger("meridian.keys")
 _cipher: Optional[Fernet] = None
 
 
+def _coerce_fernet_key(raw: str) -> bytes:
+    """Turn any secret string into a valid Fernet key.
+
+    PaaS secret generators (Render's ``generateValue``, Railway, Fly) emit a
+    random opaque string — not a base64-encoded 32-byte key. Rejecting those
+    would break the whole key vault on a fresh deploy, so we derive a stable
+    Fernet key from SHA-256 of the secret. An already-valid Fernet key is used
+    verbatim, preserving existing installations.
+    """
+    value = raw.strip()
+    if not value:
+        raise ValueError("Empty encryption secret")
+    try:
+        Fernet(value.encode())
+        return value.encode()
+    except Exception:
+        digest = hashlib.sha256(value.encode()).digest()
+        logger.info("Deriving a Fernet key from MERIDIAN_FERNET_KEY (opaque secret)")
+        return base64.urlsafe_b64encode(digest)
+
+
 def _load_fernet_key() -> bytes:
     env = settings.fernet_key.strip()
     if env:
-        try:
-            Fernet(env.encode())
-            return env.encode()
-        except Exception as exc:
-            raise RuntimeError("MERIDIAN_FERNET_KEY is not a valid Fernet key") from exc
+        return _coerce_fernet_key(env)
 
     path: Path = settings.fernet_key_file
     try:

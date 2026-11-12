@@ -1,0 +1,65 @@
+# ============================================================================
+# MERIDIAN — free external keep-alive pinger for Render Free
+# Developed by Mridul Sharma
+#
+# A Render free web service spins down after 15 minutes of idle. This workflow
+# runs OUTSIDE Render and generates a real inbound request every 10 minutes,
+# which resets that idle timer. The app itself also exposes /api/ping.
+#
+# This file is a TEMPLATE. Install it by copying its contents to
+#   .github/workflows/keep-alive.yml
+# on the repository's default branch (main). Workflow files are not committed
+# here so the repository can be updated without special workflow permissions.
+#
+# SETUP (once):
+#   1. Create .github/workflows/keep-alive.yml on main and paste this file.
+#   2. GitHub repo → Settings → Secrets and variables → Actions → Variables tab
+#      → New repository variable: RENDER_APP_URL = https://your-app.onrender.com
+# (a repository secret with the same name also works; the variable is preferred
+#  because a URL is not sensitive).
+#
+# PRIMARY free-tier workaround: a UptimeRobot HTTP(s) monitor on /api/ping at a
+# 5-minute interval needs no repository changes at all. Use this workflow as a
+# second, independent pinger — see docs/RENDER_DEPLOYMENT.md.
+#
+# CAVEATS:
+#   - Scheduled workflows can be delayed by GitHub, and are disabled after
+#     60 days of repository inactivity. For a live demo, ALSO add a free
+#     UptimeRobot / cron-job.org 5-minute monitor as a backup.
+#   - This keeps the service warm but cannot stop Render's 750 free-hours/month
+#     cap or a paid-plan-only guarantee. See docs/RENDER_DEPLOYMENT.md.
+#   - Scheduled workflows only run from the DEFAULT branch (main).
+# ============================================================================
+name: Keep Meridian Awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # every 10 minutes, safely inside the 15-min window
+  workflow_dispatch:          # allow a manual "Run workflow" to wake it now
+
+permissions:
+  contents: read
+
+concurrency:
+  group: meridian-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Ping Meridian health endpoint
+        env:
+          RENDER_APP_URL: ${{ vars.RENDER_APP_URL || secrets.RENDER_APP_URL }}
+          KEEPALIVE_ATTEMPTS: "8"
+          KEEPALIVE_BACKOFF: "12"
+        run: python scripts/keepalive.py

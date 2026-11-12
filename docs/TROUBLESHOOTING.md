@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 23 tests should pass
+pytest -q                             # 46 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -150,6 +150,8 @@ WAL mode is enabled with a 30 s busy timeout. Avoid running `scripts/seed_data.p
 and the server against the same file simultaneously, or switch to PostgreSQL.
 
 ### `psycopg2` missing with `DATABASE_URL=postgresql+psycopg2://…`
+`psycopg2-binary==2.9.10` is now an active requirement. If an older image
+still lacks it:
 ```bash
 pip install psycopg2-binary==2.9.10
 ```
@@ -190,7 +192,29 @@ python run.py     # recreates schema, key and a fresh demo report
 
 ---
 
-## 9. Getting help
+## 9. Render / PaaS — "the site keeps shutting down"
+
+| Symptom | Cause and fix |
+|---------|---------------|
+| App loads only after ~60 s, then sleeps again | Render **Free** spins down after 15 min idle. This is a platform rule. Upgrade to **Starter** (guaranteed) or add an external `/api/ping` every 5–10 min (best effort). See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md). |
+| Site dead until the next billing cycle | Free **750 instance-hours/month** or **5 GB bandwidth** exhausted. Upgrade, or delete unused free services. |
+| Deploy fails with `port scan timeout` / immediate 502 | Start command bound port 8000 instead of **`0.0.0.0:$PORT`** (Render uses 10000). Use `docker-entrypoint.sh` or `python run.py`. |
+| Health check fails only during startup | Fixed: schema/demo seeding now runs in a background thread, so the socket opens immediately. Confirm `MERIDIAN_BACKGROUND_BOOTSTRAP=true`. |
+| Progress/agents disappear mid-run | `WEB_CONCURRENCY` > 1. Set it to **1**; jobs and SSE state are in-process. |
+| Reports and API keys vanish after a restart | Ephemeral filesystem. Set `DATABASE_URL` to Render Postgres, or mount a paid persistent disk at `/app/data`; keep a stable `MERIDIAN_FERNET_KEY`. |
+| `Stored credential could not be decrypted` after deploy | The Fernet key file was regenerated with an ephemeral disk. Set a stable `MERIDIAN_FERNET_KEY` in the Render Environment (any opaque secret works — Meridian derives a valid key from it). |
+| Suspension warning about outbound traffic | Disable the optional in-app self-ping (`MERIDIAN_SELF_PING_URL`), set `MERIDIAN_LIVE_DATA=false`, and rely on a low-frequency external monitor. |
+| GitHub Actions keep-alive stops firing | Confirm `deploy/keep-alive-workflow.yml` was copied to `.github/workflows/keep-alive.yml` on `main`. Scheduled workflows are delayed under load, are disabled after 60 days of repo inactivity, and only run on the default branch. Check the Actions tab; use UptimeRobot as the primary pinger. |
+
+Quick verification:
+```bash
+curl -s https://YOUR-APP.onrender.com/api/health | python -m json.tool
+# expect: platform=render, port=10000, warming_up=false, keepalive counters
+```
+
+---
+
+## 10. Getting help
 
 Open a GitHub issue with:
 - the exact command you ran,

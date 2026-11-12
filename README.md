@@ -57,10 +57,17 @@ Meridian creates its SQLite schema, generates a `0600` Fernet key and seeds one
 complete demo report so the dashboard is never empty. Interactive API docs:
 **http://localhost:8000/docs**.
 
+> **Deploying to Render and the site keeps shutting down?** Render **Free** spins
+> services down after 15 minutes idle — no code can disable it. Switch to
+> **Starter** for guaranteed always-on, or use the included external
+> `/api/ping` keep-alive as a free workaround. This repo also fixes Render's
+> `PORT=10000` binding and ephemeral-disk data loss.
+> 👉 [docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md)
+
 ```bash
 python run.py --streamlit           # optional Streamlit frontend on :8501
 python -m scripts.seed_data         # four curated demo reports
-pytest -q                          # 23 tests
+pytest -q                          # 46 tests
 docker compose up -d --build        # full stack: app + Postgres + Redis
 ```
 
@@ -125,8 +132,10 @@ meridian/
 ├── README.md  LICENSE  CONTRIBUTING.md  CHANGELOG.md
 ├── CODE_OF_CONDUCT.md  SECURITY.md  .env.example  .gitignore
 ├── requirements.txt  pyproject.toml  Dockerfile  docker-compose.yml  run.py
+├── render.yaml  docker-entrypoint.sh  .dockerignore  # Render Blueprint
+├── deploy/      keep-alive-workflow.yml (GitHub Actions template)
 ├── docs/        ARCHITECTURE · API_REFERENCE · DEPLOYMENT · USER_GUIDE
-│                API_KEYS_SETUP · TROUBLESHOOTING
+│                API_KEYS_SETUP · TROUBLESHOOTING · RENDER_DEPLOYMENT
 ├── app/
 │   ├── main.py            # Streamlit entry point
 │   ├── config.py          # settings & constants
@@ -140,8 +149,10 @@ meridian/
 │   ├── ui/                # theme, components, 5 Streamlit pages
 │   ├── web/               # index.html, app.css, app.js, favicon.svg
 │   └── assets/            # custom.css, fonts/, icons/, images/
-├── scripts/     setup_db.py · seed_data.py · migrate.py
+├── scripts/     setup_db.py · seed_data.py · migrate.py · healthcheck.py
+│                keepalive.py (external Render pinger)
 └── tests/       test_agents · test_api_router · test_export · test_database
+                 test_render_deployment
 ```
 
 ---
@@ -200,9 +211,10 @@ Streamlit · vanilla HTML/CSS/JS · pytest · Docker / Docker Compose.
 | Document | Contents |
 |----------|----------|
 | [USER_GUIDE.md](docs/USER_GUIDE.md) | Every screen, every feature, screenshot descriptions |
-| [API_REFERENCE.md](docs/API_REFERENCE.md) | All 33 endpoints with examples |
+| [API_REFERENCE.md](docs/API_REFERENCE.md) | All 34 endpoints with examples |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agent graph, data flow, resilience, security |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Local, Docker, Compose, cloud, Nginx, backups |
+| [RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md) | **Fix Render shutting down** — Free spin-down, Starter plan, keep-alive, `PORT`, Postgres |
 | [API_KEYS_SETUP.md](docs/API_KEYS_SETUP.md) | How to get keys from all 16 providers |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Errors and exact fixes |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PR process and code style |

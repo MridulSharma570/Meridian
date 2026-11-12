@@ -8,38 +8,61 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import services
+from app import keepalive, services
 from app.agents.chat_agent import ChatAgent
 from app.agents.orchestrator import AGENT_META, PIPELINE
 from app.api.providers import list_providers
 from app.config import SUPPORTED_LANGUAGES, WEB_DIR, settings
 from app.database import queries
-from app.database.connection import ensure_schema
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
 logger = logging.getLogger("meridian.api")
 
 
+def _warmup() -> None:
+    """Schema creation + demo seeding, deliberately OFF the startup path.
+
+    PaaS hosts (Render, Railway, Fly) require the HTTP port to be listening
+    within seconds. Any slow work here would cause a port-scan timeout and a
+    deploy that appears to "keep shutting down".
+    """
+    try:
+        services.bootstrap()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Background warm-up failed (non-fatal): %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Meridian %s starting — %s", settings.version, settings.database_url.split(":")[0])
+    """Fast startup: bind immediately, warm up in the background."""
+    logger.info("Meridian %s starting — platform=%s db=%s port=%s",
+                settings.version, settings.platform,
+                settings.database_url.split(":")[0], settings.port)
+    warm: Optional[threading.Thread] = None
+    if settings.warmup_in_background:
+        warm = threading.Thread(target=_warmup, daemon=True, name="meridian-warmup")
+        warm.start()
+    else:
+        _warmup()
     try:
-        ensure_schema()
-        services.bootstrap()
+        keepalive.start_keepalive()
     except Exception as exc:
-        logger.warning("Startup bootstrap issue (non-fatal): %s", exc)
+        logger.warning("Keep-alive skipped: %s", exc)
     yield
+    keepalive.stop_keepalive()
     logger.info("Meridian shutting down")
 
 
@@ -128,20 +151,41 @@ def favicon():
     return FileResponse(str(WEB_DIR / "favicon.svg"), media_type="image/svg+xml")
 
 
-@app.get("/api/health", tags=["System"])
-def health():
+@app.api_route("/api/ping", methods=["GET", "HEAD"], tags=["System"])
+def ping(response: Response):
+    """Ultra-light liveness probe for Render health checks and uptime pings.
+
+    Touches no database, no filesystem and no network, and is never cached —
+    so a monitor always generates a genuine inbound request (which is what
+    keeps a free Render instance from spinning down). HEAD is registered
+    explicitly because free UptimeRobot/cron-job.org monitors probe with HEAD
+    and FastAPI's `@app.get` would otherwise answer 405 Method Not Allowed.
+    """
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return {"ok": True, "ts": int(time.time()), "service": "meridian"}
+
+
+@app.api_route("/api/health", methods=["GET", "HEAD"], tags=["System"])
+def health(response: Response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    state = services.startup_state()
     return {"status": "healthy", "app": settings.app_name,
             "version": settings.version, "tagline": settings.tagline,
             "developer": settings.developer,
             "database": "postgresql" if settings.using_postgres else "sqlite",
+            "platform": settings.platform, "port": settings.port,
+            "warming_up": not state["ready"],
+            "keepalive": keepalive.keepalive_status(),
             "demo_mode": settings.demo_mode}
 
 
 @app.get("/api/bootstrap", tags=["System"])
 def bootstrap():
-    """First-load payload; also guarantees a sample report exists."""
-    services.bootstrap()
+    """First-load payload. Only page loads wait (briefly) for warm-up."""
+    services.wait_for_bootstrap(3.0)
     return {
+        "warming_up": not services.startup_state()["ready"],
         "app": settings.app_name, "tagline": settings.tagline,
         "version": settings.version, "developer": settings.developer,
         "demo_mode": settings.demo_mode,
