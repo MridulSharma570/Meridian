@@ -493,8 +493,31 @@ def save_key(slot: str, provider: str, api_key: str, model: str = "") -> Dict[st
     return key_manager.save_key(slot, provider, api_key, model)
 
 
-def test_key(slot: str) -> Dict[str, Any]:
-    return test_connection(slot)
+def test_key(slot: str, provider: str = "", model: str = "",
+             api_key: str = "") -> Dict[str, Any]:
+    """Test a slot — including a key typed into the form but not yet saved.
+
+    A successful probe of a newly typed key persists exactly that key and
+    marks the slot tested, so what the user tested is what reports will
+    use. A failed probe never overwrites the previously saved key.
+    """
+    result = test_connection(slot, provider=provider or None,
+                             model=model or None, api_key=api_key or None)
+    if result.get("ok") and api_key:
+        saved_provider = provider
+        saved_model = model
+        if not saved_provider:
+            row = next((s for s in key_manager.key_status()
+                        if s["slot"] == slot), None)
+            saved_provider = (row or {}).get("provider") or ""
+        if saved_provider:
+            save_key(slot, saved_provider, api_key, saved_model)
+            try:
+                queries.update_key_test(slot, True, result.get("quota") or {})
+            except Exception:
+                pass
+            result = {**result, "saved": True, "unsaved": False}
+    return result
 
 
 def delete_key(slot: str) -> Dict[str, Any]:

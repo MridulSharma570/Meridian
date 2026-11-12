@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 120 tests should pass
+pytest -q                             # 123 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 

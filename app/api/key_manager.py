@@ -103,6 +103,30 @@ def mask(secret: str) -> str:
     return f"{s[:5]}••••••••{s[-4:]}"
 
 
+def _validate_key_shape(provider_label: str, clean: str) -> None:
+    """Reject the classic paste mistakes before they become a stored 401.
+
+    A stored credential that begins ``https…`` and ends ``…ings`` is a page
+    URL (e.g. the provider's settings page), not a key — providers answer
+    401 and the user reasonably concludes their new key is broken.
+    """
+    lowered = clean.lower()
+    if lowered.startswith(("http://", "https://", "www.")):
+        raise ValueError(
+            "That looks like a web address, not an API key. Open the "
+            f"{provider_label} API-keys page, copy the key itself (OpenRouter "
+            "keys start with “sk-or-v1-”, Groq keys with “gsk_”), and paste "
+            "only that — not the page URL.")
+    if any(ch.isspace() for ch in clean):
+        raise ValueError(
+            "The key contains spaces or line breaks. Paste only the key, "
+            "with no surrounding text, quotes or labels.")
+    if len(clean) < 12:
+        raise ValueError(
+            "That is too short to be an API key. Paste the full key from "
+            f"the {provider_label} dashboard.")
+
+
 def save_key(agent_name: str, provider: str, api_key: str, model: str = "",
              is_active: bool = True) -> Dict[str, Any]:
     """Validate, encrypt and persist a key for one of the six agent slots."""
@@ -111,6 +135,8 @@ def save_key(agent_name: str, provider: str, api_key: str, model: str = "",
         raise ValueError(f"Unknown agent slot: {agent_name}")
     p = get_provider(provider)
     clean = (api_key or "").strip()
+    if clean:
+        _validate_key_shape(p.label, clean)
     if not clean and provider != "ollama":
         # The Settings form promises "leave blank to keep current". Preserve
         # the already-encrypted credential for this same slot instead of

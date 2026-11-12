@@ -1068,7 +1068,7 @@ async function renderSettings() {
     const resultText = s.key_error
       ? 'This stored key can no longer be decrypted. Paste the key again and save.'
       : s.configured && s.last_test_ok === false
-        ? 'Saved and encrypted, but the last live connection test failed. Fix the provider issue below, then test again.'
+        ? `Saved and encrypted, but the last live connection test failed${s.quota_info?.error ? `: ${esc(s.quota_info.error)}` : '. Paste the key again and use Test connection — it now tests the key in the field and saves it only if it works.'}`
         : s.configured ? `Encrypted at rest · ${esc(s.model_label || s.model || 'default model')}`
         : 'No key saved. This slot can borrow another active provider; if none exists, answers stay disabled.';
     html += `<section class="card slot-card" data-slot="${esc(s.slot)}">
@@ -1327,9 +1327,13 @@ document.addEventListener('click', async (ev) => {
     else if (a === 'test-key') {
       const c = t.closest('.slot-card'), slot = c.dataset.slot, out = $('.slot-result', c);
       const slotState = S.settings?.slots?.find(x => x.slot === slot);
+      // Test what is in the form right now — a newly pasted key must be the
+      // thing probed, not whatever older credential happens to be stored.
+      const formKey = $('.s-key', c).value.trim();
       out.innerHTML = '<span class="spinner"></span> Testing live connection…';
-      const r = await api('/api/settings/keys/test', {method:'POST', body:{slot}});
-      if (slotState) slotState.last_test_ok = !!r.ok;
+      const r = await api('/api/settings/keys/test', {method:'POST', body:{slot,
+        provider:$('.s-provider', c).value, model:$('.s-model', c).value, api_key:formKey}});
+      if (slotState && !r.unsaved) slotState.last_test_ok = !!r.ok;
       const saved = $('.saved-key', c), savedState = $('.saved-key-state', c);
       if (saved) saved.classList.toggle('test-failed', !r.ok);
       if (savedState) savedState.textContent = r.ok ? '✓ tested' : '⚠ test failed';
@@ -1339,12 +1343,13 @@ document.addEventListener('click', async (ev) => {
         badge.innerHTML = `<i></i>${r.ok ? 'WORKING · TESTED' : 'SAVED · TEST FAILED'}`;
       }
       if (r.ok) {
-        out.innerHTML = `✓ ${esc(r.provider)} responded in ${r.latency_ms} ms · ${esc(r.model)}${r.quota ? ' · quota headers received' : ''}${r.inherited ? ' · tested through the inherited Writer key' : ''}`;
-        toast(`${r.provider} connection successful`, 'ok');
+        out.innerHTML = `✓ ${esc(r.provider)} responded in ${r.latency_ms} ms · ${esc(r.model)}${r.quota ? ' · quota headers received' : ''}${r.inherited ? ' · tested through the inherited Writer key' : ''}${r.saved ? ' · key saved — this exact key is now active' : ''}`;
+        toast(r.saved ? `${r.provider} key tested and saved` : `${r.provider} connection successful`, 'ok');
+        if (r.saved) { await refreshChrome(); await renderView(); return; }
       } else {
         // One concise explanation in the slot; the toast only points to it.
         // This prevents the repeated raw-error wall shown in the bug report.
-        out.textContent = `⚠ ${r.error || 'Connection failed.'}`;
+        out.textContent = `⚠ ${r.error || 'Connection failed.'}${r.unsaved ? ' The key you typed was NOT saved — fix it and test again.' : ''}`;
         toast(`${r.provider || 'Provider'} test failed — see the ${slot} slot for the next step`, 'err', 5200);
       }
       await refreshChrome();

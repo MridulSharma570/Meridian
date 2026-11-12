@@ -126,6 +126,11 @@ class KeyRequest(BaseModel):
 
 class KeySlotRequest(BaseModel):
     slot: str
+    # Settings' Test button sends the current form values so a newly pasted
+    # key is probed even before it is saved.
+    provider: str = ""
+    model: str = ""
+    api_key: str = ""
 
 
 class ApplyAllRequest(BaseModel):
@@ -391,7 +396,7 @@ def save_key(body: KeyRequest):
 
 @app.post("/api/settings/keys/test", tags=["Settings"])
 def test_key(body: KeySlotRequest):
-    return services.test_key(body.slot)
+    return services.test_key(body.slot, body.provider, body.model, body.api_key)
 
 
 @app.get("/api/settings/openrouter/models", tags=["Settings"])

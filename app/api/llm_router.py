@@ -516,7 +516,8 @@ _AUTO_ATTEMPTS = 3
 def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
              temperature: float = 0.35, json_mode: bool = False,
              timeout: Optional[float] = None,
-             avoid_models: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+             avoid_models: Optional[Iterable[str]] = None,
+             credentials: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Execute one completion. Returns text plus usage telemetry.
 
     On an ``openrouter_free`` auto slot the sentinel is resolved against the
@@ -533,7 +534,9 @@ def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
     model that already returned malformed output.
     """
     actual_slot = resolve_slot(slot)
-    creds = get_credentials(actual_slot)
+    # ``credentials`` lets Settings probe a key the user has typed but not
+    # yet saved; production agent calls always use the encrypted vault.
+    creds = credentials if credentials is not None else get_credentials(actual_slot)
     if creds is None:
         raise LLMError(f"No active API key configured for the {slot} slot")
     p: Provider = creds["spec"]
@@ -696,40 +699,77 @@ def complete(slot: str, system: str, user: str, **kwargs) -> str:
     return call_llm(slot, system, user, **kwargs)["text"]
 
 
-def test_connection(slot: str, timeout: float = 12.0) -> Dict[str, Any]:
-    """Validate one slot with a minimal, cheap completion."""
+def test_connection(slot: str, timeout: float = 12.0, *,
+                    provider: Optional[str] = None, model: Optional[str] = None,
+                    api_key: Optional[str] = None) -> Dict[str, Any]:
+    """Validate one slot with a minimal, cheap completion.
+
+    With ``api_key``/``provider``/``model`` supplied, the *form values* are
+    probed without touching the vault — this is what Settings' Test button
+    sends, so a newly pasted key is tested even before it is saved. The
+    saved slot's test state is only updated when the saved credential (or
+    one the caller is about to persist verbatim) was the thing tested.
+    """
     from app.database import queries
     actual = resolve_slot(slot)
-    creds = get_credentials(actual)
+    ephemeral = bool(api_key or provider or model)
+    creds: Optional[Dict[str, Any]] = None
+    if ephemeral:
+        saved = get_credentials(actual)
+        try:
+            spec = get_provider(provider) if provider else (saved or {}).get("spec")
+        except ValueError as exc:
+            return {"ok": False, "slot": slot, "error": str(exc)}
+        if spec is None:
+            return {"ok": False, "slot": slot,
+                    "error": "Choose a provider before testing."}
+        key = (api_key or "").strip()
+        if not key and saved is not None and saved["provider"] == spec.key:
+            key = saved["api_key"]
+        if not key and spec.key != "ollama":
+            return {"ok": False, "slot": slot,
+                    "error": "Enter an API key first, then test — the saved "
+                             "key belongs to a different provider."}
+        from app.api.providers import normalize_model
+        chosen_model = (model or (saved["model"] if saved is not None and
+                                  saved["provider"] == spec.key else spec.default_model))
+        creds = {"provider": spec.key, "model": normalize_model(spec.key, chosen_model),
+                 "api_key": key, "spec": spec}
+    else:
+        creds = get_credentials(actual)
     if creds is None:
         return {"ok": False, "slot": slot, "error": "No key saved in this slot"}
+
+    def persist(ok: bool, quota: Any = None, error: str = "") -> None:
+        if ephemeral and api_key:
+            return  # caller persists verbatim on success; never mark unsaved failures
+        try:
+            payload = (quota or {}) if ok else {"error": error[:240]}
+            queries.update_key_test(actual, ok, payload)
+        except Exception:
+            logger.warning("Could not persist key test for %s", actual)
+
     try:
         result = call_llm(slot, "You are a connectivity probe. Reply with exactly: OK",
                           "Reply with exactly: OK", max_tokens=12, temperature=0,
-                          timeout=timeout)
+                          timeout=timeout, credentials=creds if ephemeral else None)
         quota = result["quota_headers"] or None
-        try:
-            queries.update_key_test(actual, True, quota)
-        except Exception:
-            logger.warning("Could not persist successful key test for %s", actual)
+        persist(True, quota)
         return {"ok": True, "slot": slot, "provider": result["provider"],
                 "model": result["model"], "latency_ms": result["latency_ms"],
-                "quota": quota, "inherited": actual != slot}
+                "quota": quota, "inherited": actual != slot and not ephemeral,
+                "unsaved": bool(api_key)}
     except LLMError as exc:
-        try:
-            queries.update_key_test(actual, False)
-        except Exception:
-            logger.warning("Could not persist failed key test for %s", actual)
+        persist(False, error=str(exc))
         return {"ok": False, "slot": slot, "tested_slot": actual,
-                "inherited": actual != slot, **exc.as_dict()}
+                "inherited": actual != slot and not ephemeral,
+                "unsaved": bool(api_key), **exc.as_dict()}
     except Exception as exc:
-        try:
-            queries.update_key_test(actual, False)
-        except Exception:
-            logger.warning("Could not persist failed key test for %s", actual)
         message = _safe(exc)[:240] or "The connection test failed"
+        persist(False, error=message)
         return {"ok": False, "slot": slot, "tested_slot": actual,
-                "inherited": actual != slot, "error": message,
+                "inherited": actual != slot and not ephemeral,
+                "unsaved": bool(api_key), "error": message,
                 "status": None, "category": "connection_error",
                 "action": "Check the provider status and test again.",
                 "provider_message": None}
