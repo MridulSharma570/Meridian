@@ -499,21 +499,29 @@ function renderMission() {
     forecast:['📈','Forecast Agent'], factchecker:['✅','Fact-Checker'],
     chat:['💬','Chat Agent'], translator:['🌐','Translator']};
   const live = S.jobStatus === 'running';
-  $('#missionStatus').textContent = live ? 'RUNNING' : 'IDLE';
+  const failed = S.jobStatus === 'failed';
+  const complete = S.jobStatus === 'done' || S.jobStatus === 'completed';
+  $('#missionStatus').textContent = live ? 'RUNNING' : failed ? 'FAILED' : complete ? 'DONE' : 'IDLE';
   $('#missionStatus').classList.toggle('live', live);
+  $('#missionStatus').classList.toggle('failed', failed);
   const pulse = $('#missionPulse');
   if (pulse) pulse.hidden = !live;   // signals activity when the drawer is closed
   const pct = S.progress || 0;
+  const pipelineNote = live ? 'agents executing'
+    : failed ? 'pipeline stopped — see the failed agent below'
+    : complete ? 'pipeline complete' : 'standing by';
   let html = `<div class="progress-track"><i style="width:${pct}%"></i></div>
-    <div class="tiny muted" style="margin-bottom:14px">Pipeline ${pct}% · ${live ? 'agents executing' : 'standing by'}</div>`;
+    <div class="tiny muted" style="margin-bottom:14px">Pipeline ${pct}% · ${pipelineNote}</div>`;
   order.forEach(k => {
     const a = S.agents[k] || {}, st = a.status || 'idle';
     const state = st === 'working' ? 'WORKING <span class="dots"><i></i><i></i><i></i></span>'
-      : st === 'done' ? '✓ DONE' : 'IDLE';
+      : st === 'done' ? '✓ DONE' : st === 'failed' ? '✕ FAILED'
+      : st === 'recovered' ? 'RECOVERED' : 'IDLE';
     const sub = st === 'done' ? `${a.provider || 'Local engine'} · ${a.elapsed_ms || 0} ms`
+      : st === 'failed' ? (a.error || 'The provider could not complete this step')
       : st === 'working' ? 'Executing specialised task…' : 'Awaiting next report';
     html += `<div class="agent-row ${st}"><div class="agent-ico">${meta[k][0]}</div>
-      <div class="agent-txt"><b>${meta[k][1]}</b><small>${esc(sub)}</small></div>
+      <div class="agent-txt"><b>${meta[k][1]}</b><small title="${esc(st === 'failed' ? sub : '')}">${esc(sub)}</small></div>
       <div class="agent-state">${state}</div></div>`;
   });
   $('#missionBody').innerHTML = html;
@@ -532,7 +540,9 @@ function connectEvents(id) {
     S.eventSource.onmessage = (ev) => {
       let e; try { e = JSON.parse(ev.data); } catch { return; }
       if (e.type === 'agent_start') { S.agents[e.agent] = {status:'working'}; S.jobStatus = 'running'; }
-      else if (e.type === 'agent_done') S.agents[e.agent] = {status:'done', provider:e.provider, elapsed_ms:e.elapsed_ms};
+      else if (e.type === 'agent_done') S.agents[e.agent] = {status:e.status || 'done', provider:e.provider, elapsed_ms:e.elapsed_ms};
+      else if (e.type === 'agent_failed') S.agents[e.agent] = {status:'failed', elapsed_ms:e.elapsed_ms, error:e.error || '', reason:e.reason || ''};
+      else if (e.type === 'agent_retry') toast(e.message || 'Retrying an agent with a repaired request', 'info');
       else if (e.type === 'progress') S.progress = e.percent;
       else if (e.type === 'warning' || e.type === 'agent_warning') toast(e.message || 'An agent recovered from a provider issue', 'info');
       else if (e.type === 'job_complete') {
@@ -582,7 +592,7 @@ async function renderDashboard() {
     <div class="chips">${suggestions.map(sug => `<button class="chip" data-action="suggest" data-q="${esc(sug)}" ${canAnswer ? '' : 'disabled'}>${esc(sug)}</button>`).join('')}</div>
   </div>
   <div class="grid g4" style="margin-bottom:8px">
-    ${kpi('Reports generated', `<span class="mono">${fmtInt(stats.total_reports || 0)}</span>`, `${fmtInt(stats.completed || 0)} completed successfully`, 'file', true)}
+    ${kpi('Reports completed', `<span class="mono">${fmtInt(stats.completed || 0)}</span>`, `${fmtInt(stats.total_reports || 0)} attempts${stats.failed ? ` · ${fmtInt(stats.failed)} failed` : ''}`, 'file', true)}
     ${kpi('Avg. reliability', `<span class="mono">${fmt(stats.avg_reliability || 0, 0)}<small style="font-size:14px;color:var(--slate)">/100</small></span>`, 'Claim-level verification', 'shield', true)}
     ${kpi('Sources analysed', `<span class="mono">${fmtInt(stats.sources_analyzed || 0)}</span>`, 'Across all saved reports', 'book', true)}
     ${kpi('Agent executions', `<span class="mono">${fmtInt(stats.agents_run || 0)}</span>`, `${stats.active_keys || 0} provider keys configured`, 'grid', true)}

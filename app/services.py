@@ -208,9 +208,17 @@ def job_status(report_id: str) -> Dict[str, Any]:
             elif e.get("type") == "agent_done":
                 a = agents.setdefault(e["agent"], {"name": e.get("name", e["agent"]),
                                                    "icon": "◆"})
-                a.update({"status": "done", "elapsed_ms": e.get("elapsed_ms", 0),
+                a.update({"status": e.get("status") or "done",
+                          "elapsed_ms": e.get("elapsed_ms", 0),
                           "provider": e.get("provider", ""),
                           "warning": e.get("warning", "")})
+            elif e.get("type") == "agent_failed":
+                a = agents.setdefault(e["agent"], {"name": e.get("name", e["agent"]),
+                                                   "icon": "◆"})
+                a.update({"status": "failed", "elapsed_ms": e.get("elapsed_ms", 0),
+                          "provider": e.get("provider", ""),
+                          "error": e.get("error", ""),
+                          "reason": e.get("reason", "")})
     progress = next((e.get("percent", 0) for e in reversed(job.events)
                      if job and e.get("type") == "progress"), 0)
     status = job.status if job else (row or {}).get("status", "unknown")

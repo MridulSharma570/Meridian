@@ -169,10 +169,22 @@ def report_stats() -> Dict[str, Any]:
         failed = s.query(Report).filter(Report.status == "failed").count()
         scores = [x[0] for x in s.query(Report.reliability_score)
                   .filter(Report.status == "completed").all() if x[0]]
+        # Count sources that were actually stored with a completed report.
+        # The old `completed * 12` estimate invented a dozen sources per
+        # report even when a run had collected none.
+        sources_analyzed = 0
+        completed_rows = s.query(Report).filter(Report.status == "completed").all()
+        for row in completed_rows:
+            output = row.researcher_output if isinstance(row.researcher_output, dict) else {}
+            dataset = output.get("dataset") if isinstance(output.get("dataset"), dict) else {}
+            sources = (dataset.get("verified_sources") or output.get("verified_sources")
+                       or dataset.get("sources") or output.get("sources") or [])
+            if isinstance(sources, list):
+                sources_analyzed += len([x for x in sources if isinstance(x, dict)])
         return {
             "total_reports": total, "completed": completed, "failed": failed,
             "avg_reliability": round(sum(scores) / len(scores), 1) if scores else 0,
-            "sources_analyzed": completed * 12,
+            "sources_analyzed": sources_analyzed,
             "agents_run": s.query(AgentLog).count(),
         }
 

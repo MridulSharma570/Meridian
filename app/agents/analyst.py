@@ -12,6 +12,9 @@ class AnalystAgent(BaseAgent):
     slot = "analyst"
     icon = "📊"
     description = "Runs SWOT, PESTLE, Porter's Five Forces and market sizing"
+    strict_max_tokens = 3600
+    verified_fields = ("summary", "swot", "pestle", "porter", "trends",
+                       "key_metrics", "strategic_priorities", "growth_drivers")
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
         if answer_policy.strict_mode():
@@ -151,17 +154,20 @@ class AnalystAgent(BaseAgent):
         sources = (ctx.get("dataset", {}) or {}).get("verified_sources") or []
         return (
             "Rewrite the strategic analysis for a market-intelligence report. "
-            "Return JSON with keys: summary (2 sentences), swot (object with "
-            "Strengths/Weaknesses/Opportunities/Threats arrays of short strings), "
-            "pestle (6 objects factor/impact/note), porter (5 objects force/intensity/note), "
-            "trends (array of objects trend/direction/confidence), key_metrics (array of "
-            "objects label/value/delta/tone — use 'not available' for values), "
-            "strategic_priorities (3 strings), growth_drivers (3 strings).\n\n"
+            "Be terse so the JSON finishes. Return JSON with keys: summary "
+            "(max 45 words), swot (object with Strengths/Weaknesses/"
+            "Opportunities/Threats arrays of exactly 2 strings, each max 10 "
+            "words), pestle (6 objects factor/impact/note, note max 12 words), "
+            "porter (5 objects force/intensity/note, note max 12 words), "
+            "trends (max 3 objects trend/direction/confidence), key_metrics "
+            "(max 4 objects label/value/delta/tone — use 'not available' for "
+            "values), strategic_priorities (exactly 3 strings, max 8 words "
+            "each), growth_drivers (exactly 3 strings, max 8 words each).\n\n"
             "CRITICAL: no number in the context is measured. Use ONLY the VERIFIED "
             "SOURCES; if they do not support a claim, say 'not available'. Never "
             "invent a figure, publisher, URL or citation.\n\n"
             f"QUERY: {compact(ctx.get('query', ''), 300)}\n"
-            f"VERIFIED SOURCES:\n{compact(sources, 4000)}\n"
+            f"VERIFIED SOURCES:\n{compact(sources, 3200)}\n"
         )
 
     def llm_prompt(self, ctx: Dict[str, Any]) -> str:

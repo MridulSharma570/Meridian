@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from app.api import answer_policy
-from app.api.llm_router import call_llm, effective_slot, is_configured
+from app.api.llm_router import LLMError, call_llm, effective_slot, is_configured
 from app.config import settings
 from app.database import queries
 
@@ -41,20 +41,84 @@ _STRICT_RULES = (
 )
 
 
+def _close_json_fragment(fragment: str) -> str:
+    """Close strings/containers left open by a token-truncated response."""
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in fragment:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in ("}", "]"):
+            if stack and stack[-1] == ch:
+                stack.pop()
+            else:
+                return fragment
+    candidate = fragment.rstrip()
+    if not in_string and candidate.endswith(","):
+        candidate = candidate[:-1].rstrip()
+    if in_string:
+        candidate += '"'
+    return candidate + "".join(reversed(stack))
+
+
 def extract_json(text: str) -> Optional[Any]:
-    """Best-effort JSON extraction from an LLM response."""
+    """Best-effort JSON extraction from an LLM response.
+
+    Free models commonly wrap JSON in prose/fences or stop mid-object when
+    their output budget runs out. A complete embedded object is decoded
+    first; a truncated object is then closed (dropping only an incomplete
+    trailing property/item if necessary). This never invents values — every
+    retained token came from the provider — and agent-level key validation
+    still decides whether the result is usable.
+    """
     if not text:
         return None
-    cleaned = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
+    cleaned = text.strip().lstrip("\ufeff")
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.I)
+        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
-    for opener, closer in (("{", "}"), ("[", "]")):
-        start, end = cleaned.find(opener), cleaned.rfind(closer)
-        if start != -1 and end > start:
+
+    decoder = json.JSONDecoder()
+    starts = [m.start() for m in re.finditer(r"[\[{]", cleaned)]
+    for start in starts[:12]:
+        fragment = cleaned[start:]
+        try:
+            value, _ = decoder.raw_decode(fragment)
+            return value
+        except json.JSONDecodeError:
+            pass
+        candidate = _close_json_fragment(fragment)
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+        # If the response stopped in the middle of a property/item, retry
+        # with progressively earlier complete comma boundaries.
+        search = fragment
+        for _ in range(20):
+            comma = search.rfind(",")
+            if comma <= 0:
+                break
+            search = search[:comma]
             try:
-                return json.loads(cleaned[start:end + 1])
+                return json.loads(_close_json_fragment(search))
             except json.JSONDecodeError:
                 continue
     return None
@@ -92,7 +156,11 @@ class BaseAgent:
     icon: str = "◆"
     description: str = ""
     expect_json: bool = True
-    strict_max_tokens: int = 2400
+    strict_max_tokens: int = 3200
+    strict_attempts: int = 3
+    strict_retry_guidance: str = (
+        "Keep every prose string under 25 words and use no more than 3 items "
+        "per array unless the task explicitly requires more.")
     # Text fields the LLM is allowed to replace wholesale in verified mode.
     verified_fields: Tuple[str, ...] = ()
 
@@ -145,6 +213,31 @@ class BaseAgent:
                     merged[key] = value
         return merged
 
+    def _has_verified_content(self, parsed: Any) -> bool:
+        """Reject technically-valid JSON that contains no agent answer."""
+        if not isinstance(parsed, dict) or not parsed:
+            return False
+        if not self.verified_fields:
+            return True
+        return any(parsed.get(key) not in (None, "", [], {})
+                   for key in self.verified_fields)
+
+    def _strict_slots(self) -> list[str]:
+        # Respect the provider assigned to this agent. ``effective_slot``
+        # already borrows a configured slot when this agent has none; it
+        # would be surprising (and potentially billable) for a retry to jump
+        # to a different provider the user assigned to another agent.
+        return [effective_slot(self.slot)]
+
+    def _strict_retry_prompt(self, prompt: str, failure: str, attempt: int) -> str:
+        return (
+            f"RETRY {attempt}: the previous provider response was unusable "
+            f"({failure}). Return exactly ONE complete, valid JSON object and "
+            "nothing else — no markdown fences, commentary or partial object. "
+            "Finish every brace before stopping. If evidence is missing, "
+            f"write 'not available'. {self.strict_retry_guidance}\n\n"
+            f"ORIGINAL TASK:\n{prompt}")
+
     # -- public API ---------------------------------------------------------- #
     def run(self, ctx: Dict[str, Any]) -> AgentResult:
         t0 = time.perf_counter()
@@ -175,36 +268,108 @@ class BaseAgent:
             answer_policy.require_api(f"{self.name} agent")
             self.emit({"type": "agent_llm", "agent": self.name, "status": "calling-provider"})
             prompt = self.strict_prompt(llm_ctx, data)
-            try:
-                response = call_llm(
-                    effective_slot(self.slot), _SYSTEM_PREFIX + _STRICT_RULES, prompt,
-                    max_tokens=self.strict_max_tokens, temperature=0.25,
-                    json_mode=self.expect_json,
-                    timeout=settings.agent_timeout_s,
-                )
-            except Exception as exc:
+            slots = self._strict_slots()
+            bad_models: list[str] = []
+            attempts_used = 0
+            tokens_in = tokens_out = 0
+            last_failure = "the provider returned no usable output"
+            last_provider = "The configured provider"
+            completed = False
+
+            for attempt in range(1, max(1, self.strict_attempts) + 1):
+                attempts_used = attempt
+                # Repairs stay on the agent's assigned slot; OpenRouter auto
+                # can still move to another :free model inside the router.
+                slot = slots[0]
+                attempt_prompt = (prompt if attempt == 1 else
+                                  self._strict_retry_prompt(prompt, last_failure, attempt))
+                try:
+                    response = call_llm(
+                        slot, _SYSTEM_PREFIX + _STRICT_RULES, attempt_prompt,
+                        max_tokens=self.strict_max_tokens, temperature=0.25,
+                        json_mode=self.expect_json,
+                        timeout=settings.agent_timeout_s,
+                        avoid_models=bad_models,
+                    )
+                except Exception as exc:
+                    last_failure = str(exc)
+                    # Auth and billing gates will not heal by repeating the
+                    # same request; fail fast with the router's explanation.
+                    non_retryable = isinstance(exc, LLMError) and (
+                        exc.status in {401, 402, 403} or exc.category in {
+                            "authentication", "openrouter_credit_gate"})
+                    if attempt < self.strict_attempts and not non_retryable:
+                        self.emit({
+                            "type": "agent_retry", "agent": self.name,
+                            "attempt": attempt + 1,
+                            "message": (f"{self.name} provider attempt failed; "
+                                        "retrying with a repaired request"),
+                        })
+                        continue
+                    raise answer_policy.AnswerUnavailable(
+                        f"The configured provider could not complete the {self.name} "
+                        f"step after {attempt} attempt(s): {exc}",
+                        "Check the key, model and quota in Settings → API Keys. "
+                        "Meridian will not substitute a template answer.",
+                        "provider_failed") from exc
+
+                tokens_in += int(response.get("input_tokens") or 0)
+                tokens_out += int(response.get("output_tokens") or 0)
+                last_provider = str(response.get("provider") or last_provider)
+                parsed = (extract_json(response.get("text") or "")
+                          if self.expect_json else (response.get("text") or "").strip())
+                failure = ""
+                if self.expect_json:
+                    if not isinstance(parsed, dict):
+                        failure = "it did not return a JSON object"
+                    elif not self._has_verified_content(parsed):
+                        failure = "the JSON contained none of the requested fields"
+                elif not parsed:
+                    failure = "it returned empty text"
+
+                if not failure:
+                    try:
+                        result.data = self.strict_merge(data, parsed)
+                    except answer_policy.AnswerUnavailable as exc:
+                        if exc.reason != "unusable_output":
+                            raise
+                        failure = str(exc)
+                    else:
+                        completed = True
+                        result.source = "llm"
+                        result.provider = response["provider"]
+                        result.model = response["model"]
+                        result.tokens_in = tokens_in
+                        result.tokens_out = tokens_out
+                        result.data["verified_answer"] = True
+                        result.data["answer_model"] = response["model"]
+                        result.data["provider_attempts"] = attempts_used
+                        result.warning = ""
+                        break
+
+                model = str(response.get("model") or "").strip()
+                if model and model not in bad_models:
+                    bad_models.append(model)
+                truncated = bool(response.get("completion_truncated"))
+                last_failure = (
+                    "the output was truncated before the JSON finished"
+                    if truncated and self.expect_json else failure)
+                if attempt < self.strict_attempts:
+                    self.emit({
+                        "type": "agent_retry", "agent": self.name,
+                        "attempt": attempt + 1,
+                        "message": (f"{last_provider} returned unusable output for "
+                                    f"{self.name}; retrying with a shorter, "
+                                    "strict JSON request"),
+                    })
+
+            if not completed:
                 raise answer_policy.AnswerUnavailable(
-                    f"The configured provider could not complete the {self.name} "
-                    f"step: {exc}",
-                    "Check the key, model and quota in Settings → API Keys. "
-                    "Meridian will not substitute a template answer.",
-                    "provider_failed") from exc
-            parsed = extract_json(response["text"]) if self.expect_json else response["text"]
-            if not parsed:
-                raise answer_policy.AnswerUnavailable(
-                    f"{response['provider']} returned unusable output for the "
-                    f"{self.name} step.",
-                    "Try a different model in Settings → API Keys.",
+                    f"{last_provider} returned unusable output for the {self.name} "
+                    f"step after {attempts_used} attempts: {last_failure}.",
+                    "Try a different model in Settings → API Keys. Meridian will "
+                    "not substitute a template answer.",
                     "unusable_output")
-            result.data = self.strict_merge(data, parsed)
-            result.source = "llm"
-            result.provider = response["provider"]
-            result.model = response["model"]
-            result.tokens_in = response["input_tokens"]
-            result.tokens_out = response["output_tokens"]
-            result.data["verified_answer"] = True
-            result.data["answer_model"] = response["model"]
-            result.warning = ""
         elif is_configured(self.slot) and self.llm_prompt(llm_ctx):
             self.emit({"type": "agent_llm", "agent": self.name, "status": "calling-provider"})
             try:

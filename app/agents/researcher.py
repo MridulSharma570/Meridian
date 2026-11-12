@@ -14,7 +14,9 @@ class ResearcherAgent(BaseAgent):
     slot = "researcher"
     icon = "🔍"
     description = "Collects live market signals, financials, news and verified sources"
-    verified_fields = ("signals", "source_notes", "data_gaps")
+    # The provider is asked for `executive_signals`; merge() maps it to the
+    # report's canonical `signals` key. Validation must use the wire names.
+    verified_fields = ("executive_signals", "source_notes", "data_gaps")
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
         query = ctx.get("query", "")
@@ -71,9 +73,10 @@ class ResearcherAgent(BaseAgent):
         d = ctx.get("dataset", {})
         return (
             "As the Researcher agent, refine this market research brief.\n"
-            "Return JSON with keys: executive_signals (array of 4 short, specific, "
-            "quantified strings), source_notes (array of 3 strings on evidence quality), "
-            "data_gaps (array of 3 short strings describing what a human analyst should verify).\n"
+            "Return JSON with keys: executive_signals (array of 4 specific strings, "
+            "each under 16 words), source_notes (array of 3 strings, each under "
+            "18 words, on evidence quality), data_gaps (array of 3 short strings "
+            "describing what a human analyst should verify).\n"
             "Do NOT invent figures outside the supplied data.\n\n"
             "DATA:\n" + compact({
                 "query": d.get("query"), "sector": d.get("sector"),

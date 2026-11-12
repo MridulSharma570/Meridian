@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 105 tests should pass
+pytest -q                             # 116 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -114,10 +114,10 @@ blocks SSE entirely, the panel still resyncs via `/status` polling every 4 s.
 | `HTTP 402` on OpenRouter (Free) | OpenRouter's billing gate blocked the key/account. Meridian only sends explicit `:free` models; check the key is on the intended account/organisation, remove or raise its per-key credit limit, and check for a negative balance. A genuine `:free` model normally does not require buying credits — if the account still blocks free calls, use Groq or Gemini. The slot should read **SAVED · TEST FAILED**, not “tested”, until a new test succeeds. |
 | `HTTP 404 … this free model was retired` | OpenRouter removed a `:free` slug. Auto mode refreshes the catalogue and cools that model down for five minutes. Press **Refresh** in the Settings auto-selection panel to force a re-fetch; pin a specific model only if you need reproducibility. |
 | `No free models found` / `OFFLINE FALLBACK` | The public catalogue could not be reached (or it returned no free chat models). Meridian falls back to OpenRouter's own `openrouter/free` router — still zero cost and still current. Check `MERIDIAN_OPENROUTER_CATALOG_TIMEOUT` and outbound DNS. |
-| `returned unusable output` on an auto slot | The ranked model did not support `response_format`. Meridian only sends JSON mode when the live model declares structured-output support; otherwise the step fails instead of using a template. |
+| `returned unusable output` on an auto slot | A free model returned empty, reasoning-only, truncated or malformed output. Meridian retries that model with reasoning disabled, can fail over to another `:free` model, repairs truncated JSON and retries the agent with a shorter strict-JSON prompt. If every attempt fails, the step fails instead of using a template and Mission Control marks the agent **FAILED**. |
 | `Could not reach <provider>` | Sandbox/VPN/firewall blocks the host. No answer was generated; fix connectivity or switch provider. |
 | `timed out after 45s` | Lower `MERIDIAN_AGENT_TIMEOUT` or use Groq/Cerebras for speed. |
-| `returned unusable output` | The model ignored JSON mode. Meridian refused to publish a substitute answer. |
+| `returned unusable output` | The model ignored JSON mode or returned no requested fields after Meridian's repair retries. Meridian refused to publish a substitute answer. |
 | `Stored credential could not be decrypted` | The Fernet key changed (e.g. `data/` was reset). Re-enter the key in Settings. |
 | Keys disappear after restart | `MERIDIAN_DATA_DIR` points at a temporary path; mount a persistent volume. |
 
