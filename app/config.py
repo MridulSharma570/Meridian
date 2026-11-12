@@ -132,6 +132,10 @@ class Settings:
     openrouter_catalog_ttl: int = _int_env("MERIDIAN_OPENROUTER_CATALOG_TTL", 900)
     openrouter_catalog_timeout: float = _float_env("MERIDIAN_OPENROUTER_CATALOG_TIMEOUT", 5.0)
     openrouter_max_fallbacks: int = _int_env("MERIDIAN_OPENROUTER_FALLBACKS", 4)
+    # After an OpenRouter 429, later calls wait out the rate-limit window
+    # instead of immediately tripping it again (free variants are capped
+    # per minute). A provider-supplied Retry-After overrides this default.
+    openrouter_429_cooldown_s: float = _float_env("MERIDIAN_OPENROUTER_429_COOLDOWN_S", 30.0)
 
     signature_trio: Tuple[str, str, str] = ("#0B0906", "#C6A15B", "#F3ECDD")
 

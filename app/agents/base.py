@@ -18,7 +18,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from app.api import answer_policy
-from app.api.llm_router import LLMError, call_llm, effective_slot, is_configured
+from app.api.key_manager import get_credentials
+from app.api.llm_router import (LLMError, call_llm, configured_slots,
+                                effective_slot, is_configured)
 from app.config import settings
 from app.database import queries
 
@@ -229,6 +231,28 @@ class BaseAgent:
         # to a different provider the user assigned to another agent.
         return [effective_slot(self.slot)]
 
+    def _free_fallback_slots(self, primary: str) -> list[str]:
+        """Other configured slots on free-tier providers (never paid ones).
+
+        Used only when the assigned provider is rate-limited: a free Groq /
+        Gemini / Cerebras key the user already saved can legitimately rescue
+        the step, while silently switching to a paid provider could bill
+        them without consent.
+        """
+        fallbacks: list[str] = []
+        try:
+            available = configured_slots()
+        except Exception:
+            available = []
+        for slot in available:
+            if slot == primary or slot in fallbacks:
+                continue
+            creds = get_credentials(slot)
+            spec = (creds or {}).get("spec")
+            if spec is not None and getattr(spec, "tier", "") == "free":
+                fallbacks.append(slot)
+        return fallbacks
+
     def _strict_retry_prompt(self, prompt: str, failure: str, attempt: int) -> str:
         return (
             f"RETRY {attempt}: the previous provider response was unusable "
@@ -274,13 +298,23 @@ class BaseAgent:
             tokens_in = tokens_out = 0
             last_failure = "the provider returned no usable output"
             last_provider = "The configured provider"
+            last_status = 0
+            last_category = ""
             completed = False
 
             for attempt in range(1, max(1, self.strict_attempts) + 1):
                 attempts_used = attempt
                 # Repairs stay on the agent's assigned slot; OpenRouter auto
                 # can still move to another :free model inside the router.
+                # The one exception: if the assigned provider is rate-limited,
+                # the final attempt may use another free-tier provider the
+                # user has configured — never a paid one.
                 slot = slots[0]
+                if attempt >= 3 and (last_status == 429 or
+                                     last_category == "rate_limit"):
+                    free_fallbacks = self._free_fallback_slots(slots[0])
+                    if free_fallbacks:
+                        slot = free_fallbacks[0]
                 attempt_prompt = (prompt if attempt == 1 else
                                   self._strict_retry_prompt(prompt, last_failure, attempt))
                 try:
@@ -293,6 +327,9 @@ class BaseAgent:
                     )
                 except Exception as exc:
                     last_failure = str(exc)
+                    if isinstance(exc, LLMError):
+                        last_status = exc.status or 0
+                        last_category = exc.category or ""
                     # Auth and billing gates will not heal by repeating the
                     # same request; fail fast with the router's explanation.
                     non_retryable = isinstance(exc, LLMError) and (
@@ -350,6 +387,8 @@ class BaseAgent:
                 model = str(response.get("model") or "").strip()
                 if model and model not in bad_models:
                     bad_models.append(model)
+                last_status = 0
+                last_category = ""
                 truncated = bool(response.get("completion_truncated"))
                 last_failure = (
                     "the output was truncated before the JSON finished"

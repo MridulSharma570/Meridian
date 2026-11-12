@@ -96,12 +96,16 @@ def _completion(model: str, text: str = "OK") -> FakeResponse:
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch):
     auto.reset()
+    llm_router._reset_rate_limit_state()
+    monkeypatch.setattr(llm_router, "settings", SimpleNamespace(
+        request_timeout=8.0, openrouter_429_cooldown_s=0.0))
     monkeypatch.setattr(auto, "settings", SimpleNamespace(
         openrouter_auto_enabled=True, openrouter_catalog_ttl=900,
         openrouter_catalog_timeout=5.0, openrouter_max_fallbacks=4))
     monkeypatch.setattr(auto, "_fetch_models", lambda: _live_catalogue())
     yield
     auto.reset()
+    llm_router._reset_rate_limit_state()
     try:
         key_manager.delete_key("writer")
     except Exception:
