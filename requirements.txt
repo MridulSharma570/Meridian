@@ -43,5 +43,7 @@ yfinance==0.2.51
 # Tests
 pytest==8.3.4
 
-# PostgreSQL driver (only needed when DATABASE_URL points at PostgreSQL)
-# psycopg2-binary==2.9.10
+# PostgreSQL driver — REQUIRED for durable reports on Render/Railway/Fly.
+# SQLite files live on an ephemeral filesystem on PaaS hosts and are erased on
+# every restart, deploy or spin-down. Set DATABASE_URL to Render Postgres.
+psycopg2-binary==2.9.10

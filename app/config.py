@@ -5,6 +5,7 @@ safe, demo-friendly defaults. Nothing here requires a paid service to boot.
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,54 @@ def _bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _int_env(name: str, default: int) -> int:
+    """Read an integer env var without ever crashing app import."""
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        logging.getLogger("meridian.config").warning(
+            "Invalid %s=%r; using %s", name, os.getenv(name), default)
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    """Read a float env var without ever crashing app import."""
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        logging.getLogger("meridian.config").warning(
+            "Invalid %s=%r; using %s", name, os.getenv(name), default)
+        return default
+
+
+def server_port(default: int = 8000) -> int:
+    """Resolve the HTTP port at call time.
+
+    PaaS hosts inject ``PORT`` at runtime (Render defaults to 10000). Reading
+    it at call time means the same image works locally on 8000 and on Render
+    without a rebuild.
+    ``MERIDIAN_PORT`` is supported for local/direct launches, but a host
+    injected ``PORT`` always wins (Render/Railway/Fly set it at runtime).
+    """
+    raw = os.getenv("PORT") or os.getenv("MERIDIAN_PORT") or str(default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logging.getLogger("meridian.config").warning(
+            "Invalid port %r; falling back to %s", raw, default)
+        return default
+    return value if 1 <= value <= 65535 else default
+
+
+def web_concurrency() -> int:
+    """Worker count. Meridian keeps in-memory job/SSE state, so this MUST stay 1."""
+    raw = os.getenv("WEB_CONCURRENCY", "1")
+    try:
+        return max(1, min(int(raw), 4))
+    except ValueError:
+        return 1
+
+
 @dataclass(frozen=True)
 class Settings:
     """Immutable runtime settings."""
@@ -41,8 +90,17 @@ class Settings:
     developer: str = "Mridul Sharma"
 
     host: str = os.getenv("MERIDIAN_HOST", "0.0.0.0")
-    port: int = int(os.getenv("MERIDIAN_PORT", "8000"))
     debug: bool = _bool("MERIDIAN_DEBUG", False)
+    render_service: str = os.getenv("RENDER_SERVICE_NAME", "")  # set by Render
+
+    # Startup / warm-up. On PaaS hosts the listening socket must be ready fast;
+    # schema creation and demo seeding run in a background thread.
+    warmup_in_background: bool = _bool("MERIDIAN_BACKGROUND_BOOTSTRAP", True)
+
+    # Optional self-ping. It only helps while the process is alive (it cannot
+    # wake a spun-down free-tier instance) — use an external pinger as well.
+    self_ping_url: str = os.getenv("MERIDIAN_SELF_PING_URL", "").strip()
+    self_ping_interval_s: int = _int_env("MERIDIAN_SELF_PING_INTERVAL", 600)
 
     # Database: SQLite by default, PostgreSQL when DATABASE_URL is supplied.
     database_url: str = os.getenv("DATABASE_URL", f"sqlite:///{(DATA_DIR / 'meridian.db').as_posix()}")
@@ -54,21 +112,30 @@ class Settings:
     tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
     news_api_key: str = os.getenv("NEWS_API_KEY", "")
     world_bank_enabled: bool = _bool("MERIDIAN_WORLD_BANK", True)
-    request_timeout: float = float(os.getenv("MERIDIAN_HTTP_TIMEOUT", "8"))
-    max_sources: int = int(os.getenv("MERIDIAN_MAX_SOURCES", "12"))
+    request_timeout: float = _float_env("MERIDIAN_HTTP_TIMEOUT", 8.0)
+    max_sources: int = _int_env("MERIDIAN_MAX_SOURCES", 12)
 
     # Behaviour.
     demo_mode: bool = _bool("MERIDIAN_DEMO_MODE", True)
     enable_live_data: bool = _bool("MERIDIAN_LIVE_DATA", True)
     use_yfinance: bool = _bool("MERIDIAN_USE_YFINANCE", False)
-    max_workers: int = int(os.getenv("MERIDIAN_MAX_WORKERS", "6"))
-    agent_timeout_s: float = float(os.getenv("MERIDIAN_AGENT_TIMEOUT", "45"))
+    max_workers: int = _int_env("MERIDIAN_MAX_WORKERS", 6)
+    agent_timeout_s: float = _float_env("MERIDIAN_AGENT_TIMEOUT", 45.0)
 
     signature_trio: Tuple[str, str, str] = ("#0A1628", "#C9A84C", "#EDE4D3")
 
     @property
+    def port(self) -> int:
+        """Resolved at call time so ``--port`` overrides are reported correctly."""
+        return server_port()
+
+    @property
     def using_postgres(self) -> bool:
         return self.database_url.startswith(("postgresql", "postgres"))
+
+    @property
+    def platform(self) -> str:
+        return "render" if self.render_service else "local"
 
 
 settings = Settings()

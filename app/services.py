@@ -45,6 +45,8 @@ class ReportJob:
 _JOBS: Dict[str, ReportJob] = {}
 _LOCK = threading.Lock()
 _BOOTSTRAPPED = False
+_BOOTSTRAP_DONE = False
+_BOOTSTRAP_ERROR = ""
 
 
 def _report_to_export_dict(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -410,24 +412,52 @@ def export_path(report_id: str, fmt: str) -> str:
     return str(path)
 
 
+def startup_state() -> Dict[str, Any]:
+    """Cheap, DB-free status used by health checks (never blocks a request)."""
+    return {"ready": _BOOTSTRAP_DONE, "error": _BOOTSTRAP_ERROR or None,
+            "reports": None}  # deliberately does not query the database
+
+
+def wait_for_bootstrap(timeout_s: float = 3.0) -> bool:
+    """Brief, bounded wait used only by first-page-load requests.
+
+    Health checks and the ASGI lifespan never call this — Render must see a
+    listening socket immediately. Waiting a couple of seconds here simply
+    avoids showing an empty dashboard while the demo report is being seeded.
+    """
+    deadline = time.time() + max(0.0, timeout_s)
+    while not _BOOTSTRAP_DONE and time.time() < deadline:
+        time.sleep(0.05)
+    return _BOOTSTRAP_DONE
+
+
 def bootstrap() -> None:
-    """Guarantee the product never opens empty: seed one complete demo report."""
-    global _BOOTSTRAPPED
+    """Guarantee the product never opens empty: seed one complete demo report.
+
+    This may take a few seconds (network connectors + agent pipeline), so the
+    server calls it from a background thread. It must never sit in the ASGI
+    lifespan startup path: Render aborts deploys whose port scan times out.
+    """
+    global _BOOTSTRAPPED, _BOOTSTRAP_DONE, _BOOTSTRAP_ERROR
     if _BOOTSTRAPPED:
         return
     _BOOTSTRAPPED = True
     try:
         ensure_schema()
         existing = queries.list_reports(limit=1)
-        if existing:
-            return
-        logger.info("Bootstrapping Meridian with a complete sample report")
-        rid = start_report("Global artificial intelligence platforms market 2026",
-                           region="Global", period="5Y", language="en")
-        job = get_job(rid)
-        # Wait briefly so the first page load already has a finished report.
-        deadline = time.time() + 12
-        while job and job.status == "processing" and time.time() < deadline:
-            time.sleep(0.1)
+        if not existing:
+            logger.info("Bootstrapping Meridian with a complete sample report")
+            rid = start_report("Global artificial intelligence platforms market 2026",
+                               region="Global", period="5Y", language="en")
+            job = get_job(rid)
+            # Wait briefly so the first page load already has a finished report.
+            deadline = time.time() + 12
+            while job and job.status == "processing" and time.time() < deadline:
+                time.sleep(0.1)
+        _BOOTSTRAP_DONE = True
     except Exception as exc:
+        _BOOTSTRAP_ERROR = str(exc)
         logger.warning("Bootstrap skipped: %s", exc)
+    finally:
+        # Health checks must stay green even if seeding failed.
+        _BOOTSTRAP_DONE = True

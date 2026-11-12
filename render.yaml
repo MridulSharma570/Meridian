@@ -1,0 +1,87 @@
+# ============================================================================
+# MERIDIAN — Render Blueprint (Infrastructure as Code)
+# Developed by Mridul Sharma
+#
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → main
+#
+# ⚠️  READ THIS ABOUT SHUTDOWNS
+# With `plan: free`, Render WILL spin the service down after 15 minutes of no
+# inbound traffic and it takes ~1 minute to wake up. No code change can stop
+# that — it is a platform rule. Two supported options:
+#   A) GUARANTEED: change `plan: free` → `plan: starter` (~$7/mo). Always on,
+#      no cold starts, and you may uncomment the `disk` block for persistence.
+#   B) FREE WORKAROUND: keep `plan: free` and add an EXTERNAL pinger that hits
+#      /api/ping every 5–10 minutes. Use UptimeRobot, cron-job.org, or the
+#      deploy/keep-alive-workflow.yml template. See docs/RENDER_DEPLOYMENT.md.
+# Note: 24/7 uptime consumes ~720 of the 750 free instance-hours/month. If you
+# exceed 750h (or 5GB bandwidth) Render SUSPENDS all free services until the
+# next month — that is another common cause of "the site shut down".
+# ============================================================================
+
+services:
+  - type: web
+    name: meridian
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free                 # ← change to "starter" for guaranteed always-on
+    region: oregon
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/health
+
+    # Paid plans only: persistent storage for reports, exports and the DB.
+    # disk:
+    #   name: meridian-data
+    #   mountPath: /app/data
+    #   sizeGB: 1
+
+    envVars:
+      # Render injects PORT=10000. The entrypoint binds 0.0.0.0:$PORT.
+      - key: PORT
+        value: "10000"
+      # MUST stay 1: report jobs and SSE event streams are in-process memory.
+      - key: WEB_CONCURRENCY
+        value: "1"
+      # Stable encryption key. Render generates it once at Blueprint creation;
+      # Meridian derives a valid Fernet key from any secret string.
+      - key: MERIDIAN_FERNET_KEY
+        generateValue: true
+      - key: MERIDIAN_DATA_DIR
+        value: /app/data
+      - key: MERIDIAN_EXPORT_DIR
+        value: /app/data/exports
+      # Warm-up (schema + demo report) runs AFTER the port is listening so
+      # Render's port scan / health check never times out.
+      - key: MERIDIAN_BACKGROUND_BOOTSTRAP
+        value: "true"
+      # Free tier: disable outbound connectors. Render may suspend free
+      # services with unusually high service-initiated traffic.
+      - key: MERIDIAN_LIVE_DATA
+        value: "false"
+      - key: MERIDIAN_USE_YFINANCE
+        value: "false"
+      # Optional defence-in-depth self-ping while the process is alive.
+      # Paste your public URL after the first deploy (e.g. https://meridian.onrender.com).
+      # An EXTERNAL pinger is still required — this cannot wake a spun-down service.
+      - key: MERIDIAN_SELF_PING_URL
+        sync: false
+      - key: MERIDIAN_SELF_PING_INTERVAL
+        value: "600"
+      # Optional live data keys (leave unset for the local analytical engine).
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: NEWS_API_KEY
+        sync: false
+      # For durable reports on a paid plan, add a Render Postgres and set:
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: meridian-db
+      #     property: connectionString
+
+# databases:
+#   - name: meridian-db
+#     databaseName: meridian
+#     user: meridian
+#     plan: starter            # free Postgres expires after 30 days
+#     postgresMajorVersion: "16"

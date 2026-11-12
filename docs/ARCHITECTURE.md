@@ -23,7 +23,7 @@ persistence. There is no duplicated business logic.
                              │ REST /api + SSE /api/reports/{id}/events
 ┌────────────────────────────▼────────────────────────────────────────────┐
 │  FASTAPI  app/api/server.py                                              │
-│  33 routes · CORS · static files · structured JSON errors · lifespan      │
+│  34 routes · CORS · static files · structured JSON errors · lifespan      │
 └────────────────────────────┬────────────────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────────────────┐

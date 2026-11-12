@@ -16,8 +16,9 @@ paths only.
 |--------|------|-------------|
 | `GET` | `/` | Premium SPA (`text/html`) |
 | `GET` | `/static/{file}` | `app.css`, `app.js`, `favicon.svg` |
-| `GET` | `/api/health` | Liveness, version, DB engine, developer |
-| `GET` | `/api/bootstrap` | First-load payload: app info, stats, settings, agents, pipeline. Also seeds a demo report on a fresh install. |
+| `GET`, `HEAD` | `/api/ping` | Ultra-light, no-database liveness probe with `Cache-Control: no-store`. Use for Render health checks and external keep-alive monitors. |
+| `GET`, `HEAD` | `/api/health` | Liveness, version, DB engine, platform, port, warm-up state, keep-alive counters, developer |
+| `GET` | `/api/bootstrap` | First-load payload: app info, stats, settings, agents, pipeline. Demo seeding runs in a background thread, so this never blocks startup. |
 | `GET` | `/api/stats` | Totals, average reliability, sources, agent runs, active keys |
 | `GET` | `/api/agents` | Agent metadata, pipeline stages, chat suggestions |
 | `GET` | `/api/providers` | All 16 providers, tier, models, hints, signup URLs |
@@ -28,8 +29,18 @@ paths only.
 ```json
 {"status":"healthy","app":"Meridian","version":"1.0.0",
  "tagline":"Market Intelligence, Redefined.","developer":"Mridul Sharma",
- "database":"sqlite","demo_mode":true}
+ "database":"sqlite","platform":"local","port":8000,"warming_up":false,
+ "keepalive":{"enabled":false,"interval_s":600,"target":"","successes":0,"failures":0},
+ "demo_mode":true}
 ```
+
+**Example** `GET /api/ping`
+```json
+{"ok":true,"ts":1762920000,"service":"meridian"}
+```
+
+> On Render, `platform` is `render` and `port` is `10000`. See
+> [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for the idle spin-down fix.
 
 ---
 

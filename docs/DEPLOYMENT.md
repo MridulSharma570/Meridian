@@ -50,7 +50,7 @@ streamlit run app/main.py                 # same, directly
 python -m scripts.setup_db                # create/verify schema + demo user
 python -m scripts.migrate                 # idempotent column migration
 python -m scripts.seed_data               # four curated demo reports
-pytest -q                                 # 23-test verification suite
+pytest -q                                 # 46-test verification suite
 python -m compileall app                  # syntax smoke test
 ```
 
@@ -87,8 +87,8 @@ docker compose logs -f app
 ```
 
 Compose starts Postgres 16, Redis 7 and two uvicorn workers. `DATABASE_URL`
-uses `postgresql+psycopg2`, so add `psycopg2-binary==2.9.10` to
-`requirements.txt` before building (uncomment the line in that file).
+uses `postgresql+psycopg2`; `psycopg2-binary==2.9.10` is already an active
+dependency in `requirements.txt`.
 
 To initialise/verify the schema explicitly:
 
@@ -101,16 +101,35 @@ docker compose exec app python -m scripts.seed_data
 
 ## 4. Cloud deployment
 
-### 4.1 Render / Railway / Fly.io (recommended for demos)
+### 4.1 Render (Blueprint — see [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md))
 
-1. Create a new Web Service from the GitHub repository.
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `uvicorn app.api.server:app --host 0.0.0.0 --port $PORT`
-4. Environment: `MERIDIAN_FERNET_KEY` (secret), `MERIDIAN_PORT=$PORT`,
-   optional `DATABASE_URL`, `REDIS_URL`, `TAVILY_API_KEY`, `NEWS_API_KEY`.
-5. Attach a persistent disk to `/app/data` (or set `MERIDIAN_DATA_DIR` to its
-   mount point). Without it, reports reset on every deploy.
-6. The platform's health check path is `/api/health`.
+> **Render Free web services spin down after 15 minutes idle and take ~1 minute
+> to wake. No code can prevent that.** Upgrade to **Starter** for guaranteed
+> always-on, or use an external `/api/ping` monitor every 5–10 minutes as a
+> best-effort workaround. Full diagnosis and dashboard steps are in
+> [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md).
+
+1. Render → **New → Blueprint** → connect this repo → `main`. `render.yaml`
+   creates the Docker web service with `healthCheckPath: /api/health`.
+2. The image binds **`0.0.0.0:$PORT`** (Render injects `PORT=10000`).
+   `docker-entrypoint.sh` resolves it at runtime; never hardcode 8000.
+3. `WEB_CONCURRENCY=1` — report jobs and SSE streams are in-process.
+4. Environment: `MERIDIAN_FERNET_KEY` (generated secret; any opaque string is
+   accepted), optional `DATABASE_URL`, `REDIS_URL`, `TAVILY_API_KEY`,
+   `NEWS_API_KEY`. Leave `MERIDIAN_LIVE_DATA=false` on Free.
+5. **Persistence:** the filesystem is ephemeral — reports, exports and keys are
+   wiped on every restart/deploy/spin-down. Attach **Render Postgres** (set
+   `DATABASE_URL` to its internal connection string) or a **paid persistent
+   disk** mounted at `/app/data`. Exports are regenerated on first download.
+6. To stay on Free, add a **UptimeRobot** HTTP(s) monitor on `/api/ping` at a
+   5-minute interval. Optionally install the GitHub Actions template
+   (`deploy/keep-alive-workflow.yml` → `.github/workflows/keep-alive.yml`) with
+   the `RENDER_APP_URL` variable as a second, independent pinger.
+7. Lighter health endpoint: `/api/ping` (no database work, `Cache-Control:
+   no-store`). `/api/health` also reports `platform`, `port` and warm-up state.
+
+For Railway / Fly / other PaaS hosts the same rules apply: `python run.py`
+reads `PORT`, binds `0.0.0.0`, and runs slow warm-up in a background thread.
 
 ### 4.2 VPS with systemd + Nginx
 
