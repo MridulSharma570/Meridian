@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
+<a class="skip-link" href="#view">Skip to content</a>
 <!-- Decorative background: mesh gradients + blurred blobs -->
 <div class="ambient" aria-hidden="true">
   <div class="blob blob-a"></div><div class="blob blob-b"></div>
@@ -81,7 +82,7 @@
 
   <div class="main-wrap">
     <header class="topbar">
-      <button class="icon-btn menu-btn" id="collapseBtn" title="Toggle navigation" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
+      <button class="icon-btn menu-btn" id="collapseBtn" title="Toggle navigation" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="true"><svg><use href="#i-menu"/></svg><span class="menu-label">Menu</span></button>
       <div class="mobile-brand" aria-hidden="true"><span>◆</span> MERIDIAN</div>
       <div class="crumb" id="crumb"><span>Meridian</span><b>/</b><strong>Dashboard</strong></div>
       <div class="top-actions">
@@ -114,15 +115,6 @@
     </div>
   </aside>
 </div>
-
-<!-- Thumb-friendly navigation for phones and tablets. -->
-<nav class="tabbar" id="tabbar" aria-label="Quick navigation">
-  <button class="tabbar-item active" data-action="nav" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Home</span></button>
-  <button class="tabbar-item" data-action="nav" data-view="history"><svg><use href="#i-file"/></svg><span>History</span></button>
-  <button class="tabbar-item" data-action="nav" data-view="compare"><svg><use href="#i-swap"/></svg><span>Compare</span></button>
-  <button class="tabbar-item" data-action="nav" data-view="settings"><svg><use href="#i-key"/></svg><span>Keys</span></button>
-  <button class="tabbar-item" data-action="nav" data-view="guide"><svg><use href="#i-book"/></svg><span>Guide</span></button>
-</nav>
 
 <div class="toast-stack" id="toasts" aria-live="polite"></div>
 <div class="chat-dock" id="chatDock" hidden>
