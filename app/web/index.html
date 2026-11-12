@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0A1628" />
+<meta name="description" content="Meridian — AI-powered market intelligence. Six autonomous agents, one board-ready report." />
+<title>Meridian · Market Intelligence, Redefined.</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,900,500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+<!-- Decorative background: mesh gradients + blurred blobs -->
+<div class="ambient" aria-hidden="true">
+  <div class="blob blob-a"></div><div class="blob blob-b"></div>
+  <div class="blob blob-c"></div><div class="mesh"></div><div class="grain"></div>
+</div>
+
+<svg class="icon-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9 2 2-2 2 1 1-3 3-1-1-2 2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-4 8-8 10-4-2-8-5-8-10V6z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2 6m2 0v-6h-6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16M8 16l4-5 3 2 5-7"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h7a3 3 0 013 3v13a3 3 0 00-3-3H4zM20 4h-3a3 3 0 00-3 3v13a3 3 0 013-3h3z"/></symbol>
+</svg>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64"><path d="M32 3 L59 32 L32 61 L5 32 Z" fill="none" stroke="#C9A84C" stroke-width="2"/><path d="M32 12 L50 32 L32 52 L14 32 Z" fill="none" stroke="#C9A84C" stroke-width="1" opacity=".45"/><text x="32" y="41" text-anchor="middle" font-family="Satoshi, Arial" font-weight="900" font-size="27" fill="#EDE4D3">M</text></svg>
+      </div>
+      <div class="brand-text"><strong>MERIDIAN</strong><span>Market Intelligence</span></div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <div class="nav-label">WORKSPACE</div>
+      <button class="nav-item active" data-action="nav" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Dashboard</span></button>
+      <button class="nav-item" data-action="nav" data-view="history"><svg><use href="#i-file"/></svg><span>Report History</span><em id="navReportCount">0</em></button>
+      <button class="nav-item" data-action="nav" data-view="compare"><svg><use href="#i-swap"/></svg><span>Compare Mode</span></button>
+      <div class="nav-label">SYSTEM</div>
+      <button class="nav-item" data-action="nav" data-view="settings"><svg><use href="#i-key"/></svg><span>API Keys</span><i class="dot" id="keyDot"></i></button>
+      <button class="nav-item" data-action="nav" data-view="guide"><svg><use href="#i-book"/></svg><span>User Guide</span></button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="plan-card">
+        <div class="plan-head"><svg><use href="#i-spark"/></svg><span>ENTERPRISE ENGINE</span></div>
+        <p>7 autonomous agents · 15 LLM providers · 14 languages</p>
+        <div class="plan-bar"><i style="width:100%"></i></div>
+      </div>
+      <div class="sidebar-foot">Developed by <b>Mridul Sharma</b></div>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="icon-btn" id="collapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar"><svg><use href="#i-menu"/></svg></button>
+      <div class="crumb" id="crumb"><span>Meridian</span><b>/</b><strong>Dashboard</strong></div>
+      <div class="top-actions">
+        <div class="live-pill"><i></i><span>ENGINE ONLINE</span></div>
+        <button class="icon-btn" data-action="refresh" title="Refresh data"><svg><use href="#i-refresh"/></svg></button>
+        <button class="btn btn-gold btn-sm" data-action="new-report"><svg><use href="#i-spark"/></svg> New Report</button>
+      </div>
+    </header>
+
+    <main class="content" id="view"></main>
+
+    <footer class="footer">
+      <div class="footer-brand"><span>◆</span> MERIDIAN <i>·</i> Market Intelligence, Redefined.</div>
+      <div>Developed by <b>Mridul Sharma</b> <i>·</i> v1.0.0 <i>·</i> <a href="/docs" target="_blank" rel="noopener">API Docs</a></div>
+    </footer>
+  </div>
+
+  <aside class="mission" id="mission">
+    <div class="mission-head">
+      <div><span class="eyebrow">LIVE TELEMETRY</span><h3>Agent Activity</h3></div>
+      <span class="mission-status" id="missionStatus">IDLE</span>
+    </div>
+    <div class="mission-body" id="missionBody"></div>
+    <div class="mission-foot">
+      <div class="mf-row"><span>Encrypted key vault</span><b>Fernet</b></div>
+      <div class="mf-row"><span>Data mode</span><b id="missionDataMode">—</b></div>
+      <div class="mf-row"><span>Providers online</span><b id="missionKeys">0 / 7</b></div>
+    </div>
+  </aside>
+</div>
+
+<div class="toast-stack" id="toasts" aria-live="polite"></div>
+<div class="chat-dock" id="chatDock" hidden>
+  <div class="chat-head"><div><span class="eyebrow">AGENT 4 · FOLLOW-UP INTELLIGENCE</span><h4>Ask Meridian</h4></div><button class="icon-btn" data-action="close-chat" aria-label="Close chat"><svg><use href="#i-close"/></svg></button></div>
+  <div class="chat-log" id="chatLog"></div>
+  <div class="chat-suggest" id="chatSuggest"></div>
+  <form class="chat-form" id="chatForm"><input id="chatInput" placeholder="Ask about this report…" autocomplete="off" /><button class="btn btn-gold" type="submit"><svg><use href="#i-arrow"/></svg></button></form>
+</div>
+<button class="chat-fab" id="chatFab" data-action="open-chat" title="Ask a follow-up question"><svg><use href="#i-chat"/></svg><span>Ask</span></button>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
