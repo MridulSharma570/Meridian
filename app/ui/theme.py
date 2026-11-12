@@ -94,6 +94,44 @@ hr{border-color:var(--line)!important}
 .mrd-foot b{color:var(--gold)}
 .mrd-logo{font-family:'Satoshi',sans-serif;font-weight:900;letter-spacing:.18em;color:var(--ivory);font-size:17px}
 .mrd-rule{height:1px;background:linear-gradient(90deg,var(--line),transparent);margin:20px 0}
+
+/* ------------------------------------------------ Responsive Streamlit --- */
+html{-webkit-text-size-adjust:100%}
+img,svg,canvas{max-width:100%!important}
+@media(min-width:1800px){.block-container{max-width:1440px!important}}
+@media(max-width:1024px){
+  .block-container{padding-left:20px!important;padding-right:20px!important;
+    padding-top:16px!important;max-width:100%!important}
+  .mrd-hero{padding:24px 22px!important}
+  .mrd-h1{font-size:30px!important}
+  .mrd-card{padding:18px!important}
+}
+@media(max-width:768px){
+  /* Streamlit turns its sidebar into an overlay here; keep content full width. */
+  .block-container{padding:12px 14px 88px!important;max-width:100%!important}
+  .mrd-hero{padding:20px 16px!important;border-radius:16px!important}
+  .mrd-h1{font-size:clamp(24px,7vw,30px)!important}
+  .mrd-sub{font-size:12px!important}
+  .mrd-card{padding:14px!important;border-radius:14px!important}
+  .mrd-kpi{font-size:20px}
+  .mrd-logo{font-size:15px}
+  h1{font-size:24px!important}h2{font-size:20px!important}h3{font-size:17px!important}
+  .stMetric{padding:12px!important}
+  [data-testid="stMetricValue"]{font-size:20px!important}
+  .stButton button,.stDownloadButton button{width:100%!important;min-height:44px!important}
+  .stTabs [data-baseweb="tab"]{padding:10px 10px!important;font-size:11px!important}
+  .stDataFrame,.stTable{overflow-x:auto!important}
+  .stTextInput input,.stTextArea textarea{font-size:16px!important}
+}
+@media(max-width:480px){
+  .block-container{padding-left:10px!important;padding-right:10px!important}
+  .mrd-h1{font-size:24px!important}
+  .mrd-badge{font-size:9px;padding:4px 8px}
+  .stMetric{padding:10px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
 </style>
 """
 

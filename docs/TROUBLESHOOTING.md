@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 46 tests should pass
+pytest -q                             # 59 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -214,7 +214,25 @@ curl -s https://YOUR-APP.onrender.com/api/health | python -m json.tool
 
 ---
 
-## 10. Getting help
+## 10. Responsive layout & the menu button
+
+| Symptom | Fix |
+|---------|-----|
+| Only the ≡ button is visible / content looks off-screen | Hard-refresh — an older cached `app.css` has a three-column grid squeezed into a phone. Confirm `/static/app.css` contains `@media(max-width:1100px)`. |
+| ≡ button "does nothing" on a tablet | Below 1100px it opens the navigation **drawer** (off-canvas, from the left). Look for the dimmed backdrop; the button turns gold while open. On desktop it instead collapses the sidebar to a 72px rail. |
+| Sidebar disappeared entirely on a phone | Expected — use the ≡ button or the five-tab bottom bar. The sidebar is a drawer below 1100px. |
+| Agent Activity panel is missing | Use the pulse button in the top bar: on desktop it toggles the panel, on tablets/phones it opens it as a right-hand drawer. |
+| Drawer will not close | Tap the backdrop, press `Escape`, use the ✕ inside the drawer, or pick a page. Opening one drawer always closes the other. |
+| Charts/heatmap cut off on a phone | They scroll horizontally inside their card; charts also reflow on resize and orientation change. |
+| Inputs zoom the whole page on iOS | Fixed — form inputs use 16px on phones. |
+| Bottom bar overlaps the footer | `main-wrap` reserves `var(--tabbar-h)` plus the iOS safe-area inset. |
+
+Both frontends (the SPA and Streamlit) share the same breakpoints. Verify with
+`pytest -q tests/test_responsive_ui.py`.
+
+---
+
+## 11. Getting help
 
 Open a GitHub issue with:
 - the exact command you ran,

@@ -19,10 +19,10 @@
   --f-head:'Satoshi','Inter',system-ui,-apple-system,sans-serif;
   --f-body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
   --f-mono:'JetBrains Mono','SFMono-Regular',Consolas,monospace;
-  --sidebar:248px; --mission:292px;
+  --sidebar:248px; --mission:292px; --tabbar-h:60px;
 }
 *,*::before,*::after{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:var(--navy);color:var(--white);font-family:var(--f-body);
   font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -54,10 +54,17 @@ svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;
 .grain{position:absolute;inset:0;opacity:.16;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E")}
 
-/* ---------- Shell ---------- */
-.shell{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr) var(--mission);
-  min-height:100vh;transition:grid-template-columns .3s cubic-bezier(.2,.8,.2,1)}
-.shell.collapsed{grid-template-columns:72px minmax(0,1fr) var(--mission)}
+/* ---------- Shell ----------
+   --sb / --ms are the live column widths. State classes on .shell change only
+   those variables, so every breakpoint reuses the same three-column grid.
+   -------------------------------------------------------------------------- */
+.shell{--sb:var(--sidebar);--ms:var(--mission);
+  display:grid;grid-template-columns:var(--sb) minmax(0,1fr) var(--ms);
+  min-height:100vh;min-height:100dvh;
+  transition:grid-template-columns .3s cubic-bezier(.2,.8,.2,1)}
+.shell.collapsed{--sb:72px}
+.shell.mission-hidden{--ms:0px}
+.shell.mission-hidden .mission{display:none}
 .sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
   background:linear-gradient(180deg,rgba(9,20,38,.92),rgba(10,22,40,.84));
   border-right:1px solid var(--line);backdrop-filter:blur(24px);z-index:20;overflow:hidden}
@@ -286,7 +293,8 @@ select{padding-right:28px;appearance:none;
 .legend span{display:flex;align-items:center;gap:6px;cursor:pointer;transition:color .2s}
 .legend span:hover{color:var(--white)}
 .legend i{width:9px;height:9px;border-radius:3px;display:block}
-.heat-grid{display:grid;gap:4px;align-items:center}
+.heat-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px}
+.heat-grid{display:grid;gap:4px;align-items:center;min-width:0}
 .heat-cell{height:26px;border-radius:5px;position:relative;cursor:pointer;transition:transform .15s,box-shadow .15s}
 .heat-cell:hover{transform:scale(1.12);box-shadow:0 0 0 2px var(--gold);z-index:2}
 .heat-lbl{font-size:10px;color:var(--muted);white-space:nowrap}
@@ -480,18 +488,221 @@ select{padding-right:28px;appearance:none;
 .guide-step{border-left:2px solid rgba(201,168,76,.25);padding-left:18px;margin-bottom:18px}
 .guide-step h4{font-family:var(--f-head);font-size:14px;margin:0 0 6px;color:var(--ivory)}
 
+/* ---------- Navigation drawers / mobile chrome ---------------------------
+   Desktop uses the three-column grid. Below 1100px the sidebar and the Agent
+   Activity rail become off-canvas drawers, and a bottom tab bar gives
+   thumb-friendly navigation. The menu button therefore always has a job:
+   collapse/expand on desktop, open/close the drawer on small screens.
+   -------------------------------------------------------------------------- */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(3,9,20,.68);
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+  opacity:0;visibility:hidden;pointer-events:none;transition:opacity .28s ease,visibility .28s}
+body.nav-open .scrim,body.mission-open .scrim{opacity:1;visibility:visible;pointer-events:auto}
+.drawer-close{display:none;position:absolute;top:20px;right:14px;width:36px;height:36px;z-index:2}
+.brand{position:relative}
+.mission-head{position:relative}
+.mobile-brand{display:none;align-items:center;gap:7px;font-family:var(--f-head);
+  font-weight:900;font-size:13px;letter-spacing:.14em;color:var(--ivory);white-space:nowrap}
+.mobile-brand span{color:var(--gold);font-size:15px}
+.btn-pulse{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;
+  background:var(--gold-2);box-shadow:0 0 0 2px var(--navy),0 0 8px var(--gold)}
+.btn-pulse[hidden]{display:none}
+#missionBtn{position:relative}
+#missionBtn[aria-expanded="false"]{color:var(--slate)}
+.menu-btn .bar{transition:transform .28s ease,opacity .2s ease}
+body.nav-open #collapseBtn{color:var(--gold);border-color:rgba(201,168,76,.5);
+  background:rgba(201,168,76,.12)}
+
+.tabbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;
+  grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;
+  background:rgba(9,20,38,.94);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -10px 32px rgba(0,0,0,.35)}
+.tabbar-item{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;min-height:var(--tabbar-h);padding:8px 2px;color:var(--slate);font-size:10px;
+  font-weight:600;letter-spacing:.02em;position:relative;transition:color .2s ease}
+.tabbar-item svg{width:20px;height:20px}
+.tabbar-item::before{content:"";position:absolute;top:0;left:22%;right:22%;height:2px;
+  border-radius:0 0 3px 3px;background:transparent;transition:background .2s}
+.tabbar-item:hover{color:var(--white)}
+.tabbar-item.active{color:var(--gold-2)}
+.tabbar-item.active::before{background:var(--gold);box-shadow:0 0 10px rgba(201,168,76,.6)}
+.tabbar-item:active{transform:scale(.96)}
+
 /* ---------- Responsive ---------- */
-@media(max-width:1400px){.shell{grid-template-columns:var(--sidebar) minmax(0,1fr) 260px}
-  .shell.collapsed{grid-template-columns:72px minmax(0,1fr) 260px}
-  .chat-fab,.chat-dock{right:286px}.toast-stack{right:284px}}
-@media(max-width:1180px){.shell,.shell.collapsed{grid-template-columns:72px minmax(0,1fr)}
-  .brand-text,.nav-label,.nav-item span,.nav-item em,.sidebar-bottom{display:none}
-  .nav-item{justify-content:center}.mission{display:none}
-  .chat-fab,.chat-dock{right:26px}.toast-stack{right:26px}
+/* ==========================================================================
+   RESPONSIVE LAYOUT
+   Desktop  >= 1101px : three-column grid, collapsible sidebar,
+                        Agent Activity panel can be hidden for more width
+   Compact  <= 1100px : one column, off-canvas nav + telemetry drawers,
+                        persistent bottom tab bar
+   Phone    <= 700px  : compact type, 2-up KPIs, full-width form controls
+   Tiny     <= 380px  : final tightening
+   ========================================================================== */
+:where(button,a,input,select,textarea):focus-visible{
+  outline:2px solid var(--gold-2);outline-offset:2px;border-radius:6px}
+
+/* --- Wide desktops ------------------------------------------------------- */
+@media(min-width:1800px){
+  .content{max-width:1440px;padding:40px 48px 64px}
+  .hero{padding:48px 52px 40px}.hero h1{font-size:46px}
+}
+@media(max-width:1500px) and (min-width:1101px){
+  .shell{--mission:260px}
+  .chat-fab,.chat-dock{right:286px}.toast-stack{right:284px}
+}
+@media(max-width:1280px) and (min-width:1101px){
+  .shell{--sidebar:216px;--mission:240px}
+  .chat-fab,.chat-dock{right:266px}.toast-stack{right:264px}
+  .content{padding:28px 22px 40px}
   .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .g3{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:820px){.content{padding:24px 18px 40px}.topbar{padding:0 18px}
-  .g2,.g23,.g32,.g3,.g4{grid-template-columns:1fr}.hero{padding:28px 22px}
-  .hero h1{font-size:30px}.composer-row .btn{margin-left:0;width:100%}
-  .chat-dock{width:calc(100vw - 32px);right:16px}.vs-head{grid-template-columns:1fr;gap:8px}
-  .vs-orb{width:44px;height:44px}.metric-row{grid-template-columns:1fr 90px 1fr}}
+}
+
+/* --- Compact: off-canvas drawers + bottom tab bar ------------------------ */
+@media(max-width:1100px){
+  .shell{--sb:0px;--ms:0px;grid-template-columns:minmax(0,1fr)}
+  .shell.collapsed,.shell.mission-hidden{--sb:0px;--ms:0px}
+  .shell.mission-hidden .mission{display:flex}
+  .main-wrap{padding-bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px))}
+  .tabbar{display:grid}
+  body.nav-open,body.mission-open{overflow:hidden}
+
+  /* Left navigation drawer ------------------------------------------------ */
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:min(86vw,300px);
+    height:100vh;height:100dvh;z-index:60;transform:translateX(-102%);
+    transition:transform .3s cubic-bezier(.2,.8,.2,1);
+    box-shadow:16px 0 48px rgba(0,0,0,.55);border-right:1px solid rgba(201,168,76,.18)}
+  body.nav-open .sidebar{transform:translateX(0)}
+  .sidebar .brand{padding:22px 58px 24px 20px}
+  .drawer-close{display:inline-flex}
+  /* A desktop "collapsed" preference must not hide drawer labels. */
+  .shell.collapsed .brand{ padding:22px 58px 24px 20px }
+  .shell.collapsed .brand-text{display:flex}
+  .shell.collapsed .nav-label{display:block}
+  .shell.collapsed .nav-item span,.shell.collapsed .nav-item em{display:inline}
+  .shell.collapsed .sidebar-bottom{display:block}
+  .shell.collapsed .nav-item{justify-content:flex-start;padding:11px 12px}
+  .shell.collapsed .nav-item .dot{position:static;margin-left:auto}
+  .nav-label{display:block}
+  .nav-item span,.nav-item em{display:inline}
+  .sidebar-bottom{display:block}
+
+  /* Right Agent Activity drawer ------------------------------------------- */
+  .mission{position:fixed;top:0;right:0;bottom:0;width:min(90vw,340px);
+    height:100vh;height:100dvh;z-index:60;transform:translateX(102%);
+    display:flex;transition:transform .3s cubic-bezier(.2,.8,.2,1);
+    box-shadow:-16px 0 48px rgba(0,0,0,.55);border-left:1px solid rgba(201,168,76,.18)}
+  body.mission-open .mission{transform:translateX(0)}
+  .mission-head{display:flex;align-items:center;gap:10px;padding:18px 14px 16px}
+  .mission-head>div{flex:1;min-width:0}
+  .mission-status{float:none;margin-top:0;flex:none}
+  .mission-head .drawer-close{position:static;flex:none;width:34px;height:34px}
+  .mission-body{padding:14px 12px}.mission-foot{padding:14px 16px}
+
+  /* Chrome ---------------------------------------------------------------- */
+  .topbar{padding:0 16px;height:60px}
+  .live-pill{display:none}
+  .content{max-width:100%;padding:24px 18px 40px}
+  .g4,.g3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g23,.g32{grid-template-columns:1fr}
+  .chart-box{height:220px}.chart-box.tall{height:250px}.chart-box.short{height:180px}
+  .toast-stack{left:12px;right:12px;top:70px;align-items:stretch}
+  .toast{min-width:0;max-width:none;width:100%}
+  .chat-fab{right:16px;bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 16px)}
+  .chat-dock{left:12px;right:12px;width:auto;
+    bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 12px);
+    height:min(72dvh,540px);max-height:calc(100dvh - 90px)}
+}
+
+/* --- Phones -------------------------------------------------------------- */
+@media(max-width:700px){
+  .topbar{height:56px;padding:0 12px;gap:10px}
+  .mobile-brand{display:flex}
+  .crumb{display:none}
+  .top-actions{gap:7px}
+  .icon-btn{width:40px;height:40px}
+  .icon-btn svg{width:18px;height:18px}
+  .btn-sm{padding:9px 11px}
+  .content{padding:18px 14px 32px}
+  .hero{padding:24px 18px 22px;border-radius:18px}
+  .hero h1{font-size:clamp(26px,7.6vw,34px)}
+  .hero-sub{font-size:12px;margin-bottom:20px}
+  .composer{padding:12px}
+  .composer-main{gap:9px}
+  #queryInput{font-size:16px}              /* stops iOS auto-zoom on focus */
+  .composer-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .composer-row .field{min-width:0}
+  .composer-row .field select{width:100%;font-size:11px;padding:9px 24px 9px 8px}
+  .composer-row .btn{grid-column:1/-1;width:100%;margin-left:0}
+  .chips{gap:6px;margin-top:14px}.chip{font-size:10px;padding:6px 10px}
+  .g2,.g3,.g23,.g32{grid-template-columns:1fr}
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .card{padding:16px;border-radius:14px}
+  .card-head{flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .card-head h3{font-size:15px}.card-head h2{font-size:18px}
+  .kpi .kpi-val{font-size:22px}.kpi .kpi-val.mono{font-size:20px}
+  .kpi .kpi-label{font-size:9px}.kpi .kpi-ico{width:28px;height:28px}
+  .section-title{margin:24px 0 12px}.section-title h2{font-size:17px}
+  .report-row{grid-template-columns:minmax(0,1fr);gap:10px;padding:12px}
+  .report-row .rr-actions{justify-content:flex-start;flex-wrap:wrap}
+  .filter-bar{padding:12px;gap:10px}
+  .filter-bar .field{flex:1 1 120px;min-width:0}
+  .filter-bar .btn{width:100%;margin-left:0}
+  .tabs{margin-bottom:14px}.tab{padding:10px 12px;font-size:11px}
+  .md{font-size:12px}.md h1{font-size:19px}.md h2{font-size:16px}
+  .md table{font-size:11px}
+  .md th,.md td{padding:8px 7px;white-space:normal;overflow-wrap:anywhere}
+  .vs-head{grid-template-columns:1fr 44px 1fr;gap:8px}
+  .vs-orb{width:42px;height:42px;font-size:14px}
+  .metric-row{grid-template-columns:1fr 78px 1fr;gap:8px}
+  .metric-val{font-size:13px}.metric-row .m-name{font-size:10px}
+  .slot-grid{grid-template-columns:1fr}
+  .slot-actions .btn{min-width:0;flex:1 1 45%}
+  .info-strip{flex-direction:column;gap:8px;padding:14px}
+  .footer{flex-direction:column;text-align:center;gap:6px;padding:18px 14px}
+  .footer i{margin:0 3px}
+  .chat-fab{padding:11px 15px;font-size:11px}
+  .chat-dock{bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 8px)}
+  .toast-stack{top:64px;left:10px;right:10px}
+  .heat-cell{height:22px}
+  .heat-grid{min-width:480px}
+  .chart-tooltip{max-width:calc(100vw - 48px);white-space:normal;font-size:10px;padding:7px 9px}
+}
+
+/* --- Very small phones --------------------------------------------------- */
+@media(max-width:480px){
+  .new-report-btn{padding:0;width:40px;height:40px;min-width:40px;border-radius:12px}
+  .new-report-btn .btn-label{display:none}
+  .new-report-btn svg{width:17px;height:17px}
+  .mobile-brand{font-size:11px;letter-spacing:.1em}
+  .hero-eyebrow{font-size:9px;letter-spacing:.16em}
+}
+@media(max-width:380px){
+  .content{padding:14px 10px 28px}
+  .card{padding:14px}
+  .top-actions{gap:5px}
+  .mobile-brand{display:none}
+  .crumb{display:flex;font-size:11px}
+  .crumb span,.crumb b{display:none}
+  .tabbar-item{font-size:9px}
+  .tabbar-item svg{width:18px;height:18px}
+  .composer-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .composer-row .field:last-of-type{grid-column:1/-1}
+}
+
+/* --- Short landscape screens --------------------------------------------- */
+@media(max-height:560px) and (orientation:landscape){
+  :root{--tabbar-h:48px}
+  .topbar{height:48px}
+  .content{padding-top:14px}
+  .hero{padding:18px}
+  .hero h1{font-size:26px}
+  .tabbar-item{min-height:48px}
+  .tabbar-item svg{width:18px;height:18px}
+}
+
+/* --- Accessibility ------------------------------------------------------- */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+}

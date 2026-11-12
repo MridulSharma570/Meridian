@@ -42,6 +42,166 @@ function toast(msg, kind = 'info', ms = 4200) {
   $('#toasts').append(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; setTimeout(() => el.remove(), 300); }, ms);
 }
+
+/* ---------------------------------------------- Responsive navigation ---
+   One button, two real jobs:
+     * Desktop (>=1101px) — collapse / expand the sidebar. Persisted.
+     * Compact (<=1100px) — open / close the off-canvas navigation drawer,
+       with a scrim, Escape, focus handling and automatic close on navigate.
+   The Activity button does the same for the Agent Activity panel/drawer.
+   State classes live on <body> (drawers) and .shell (desktop columns).
+   -------------------------------------------------------------------------- */
+const MQ_COMPACT = (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1100px)')) ||
+  { matches: false, addEventListener() {}, addListener() {} };
+const LAYOUT_KEY = 'meridian.layout.v1';
+const Layout = {
+  collapsed: false, missionHidden: false,
+  navOpen: false, missionOpen: false, focusBefore: null,
+};
+
+const isCompact = () => !!MQ_COMPACT.matches;
+
+function readLayoutPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}');
+    Layout.collapsed = !!saved.collapsed;
+    Layout.missionHidden = !!saved.missionHidden;
+  } catch (e) { /* storage blocked (private mode) — safe defaults apply */ }
+}
+function saveLayoutPrefs() {
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({
+      collapsed: Layout.collapsed, missionHidden: Layout.missionHidden }));
+  } catch (e) { /* non-fatal */ }
+}
+function reflowCharts() { setTimeout(() => { try { renderCharts(); } catch (e) {} }, 340); }
+
+function syncLayout() {
+  const compact = isCompact();
+  document.body.classList.toggle('nav-open', compact && Layout.navOpen);
+  document.body.classList.toggle('mission-open', compact && Layout.missionOpen);
+
+  const menu = $('#collapseBtn');
+  if (menu) {
+    const open = compact ? Layout.navOpen : !Layout.collapsed;
+    menu.setAttribute('aria-expanded', String(open));
+    menu.setAttribute('aria-label', compact
+      ? (Layout.navOpen ? 'Close navigation' : 'Open navigation')
+      : (Layout.collapsed ? 'Expand sidebar' : 'Collapse sidebar'));
+    menu.setAttribute('title', compact
+      ? (Layout.navOpen ? 'Close navigation' : 'Open navigation menu')
+      : (Layout.collapsed ? 'Expand sidebar' : 'Collapse sidebar'));
+  }
+  const act = $('#missionBtn');
+  if (act) {
+    const open = compact ? Layout.missionOpen : !Layout.missionHidden;
+    act.setAttribute('aria-expanded', String(open));
+    act.setAttribute('aria-label', compact
+      ? (Layout.missionOpen ? 'Close Agent Activity' : 'Open Agent Activity')
+      : (Layout.missionHidden ? 'Show Agent Activity' : 'Hide Agent Activity'));
+    act.setAttribute('title', compact
+      ? (Layout.missionOpen ? 'Close Agent Activity' : 'Open Agent Activity')
+      : (Layout.missionHidden ? 'Show Agent Activity' : 'Hide Agent Activity'));
+  }
+  // Only one drawer may be open; the scrim is shared.
+  const scrim = $('#scrim');
+  if (scrim) scrim.setAttribute('aria-hidden', String(!(Layout.navOpen || Layout.missionOpen)));
+}
+
+function applyDesktopLayout() {
+  const shell = $('#shell');
+  if (!shell) return;
+  const compact = isCompact();
+  shell.classList.toggle('collapsed', !compact && Layout.collapsed);
+  shell.classList.toggle('mission-hidden', !compact && Layout.missionHidden);
+}
+
+function closeDrawers(restoreFocus = false) {
+  const wasOpen = Layout.navOpen || Layout.missionOpen;
+  Layout.navOpen = false;
+  Layout.missionOpen = false;
+  syncLayout();
+  if (restoreFocus && wasOpen && Layout.focusBefore &&
+      document.body.contains(Layout.focusBefore)) {
+    try { Layout.focusBefore.focus(); } catch (e) { /* element gone */ }
+  }
+  if (wasOpen) Layout.focusBefore = null;
+}
+
+function rememberFocus() {
+  if (!Layout.navOpen && !Layout.missionOpen) Layout.focusBefore = document.activeElement;
+}
+
+function toggleNav() {
+  if (isCompact()) {
+    if (!Layout.navOpen) rememberFocus();
+    Layout.navOpen = !Layout.navOpen;
+    Layout.missionOpen = false;
+    syncLayout();
+    if (Layout.navOpen) setTimeout(() => { try { $('#sidebar .nav-item')?.focus(); } catch (e) {} }, 40);
+  } else {
+    Layout.collapsed = !Layout.collapsed;
+    saveLayoutPrefs();
+    applyDesktopLayout();
+    syncLayout();
+    reflowCharts();
+  }
+}
+
+function toggleMission() {
+  if (isCompact()) {
+    if (!Layout.missionOpen) rememberFocus();
+    Layout.missionOpen = !Layout.missionOpen;
+    Layout.navOpen = false;
+    syncLayout();
+    if (Layout.missionOpen) {
+      setTimeout(() => { try { $('#mission [data-action="close-mission"]')?.focus(); } catch (e) {} }, 40);
+    }
+  } else {
+    Layout.missionHidden = !Layout.missionHidden;
+    saveLayoutPrefs();
+    applyDesktopLayout();
+    syncLayout();
+    reflowCharts();
+  }
+}
+
+function onLayoutModeChange() {
+  Layout.navOpen = false;
+  Layout.missionOpen = false;
+  Layout.focusBefore = null;
+  applyDesktopLayout();
+  syncLayout();
+  reflowCharts();
+}
+
+function initLayout() {
+  readLayoutPrefs();
+  applyDesktopLayout();
+  syncLayout();
+  if (typeof MQ_COMPACT.addEventListener === 'function') MQ_COMPACT.addEventListener('change', onLayoutModeChange);
+  else if (typeof MQ_COMPACT.addListener === 'function') MQ_COMPACT.addListener(onLayoutModeChange);
+
+  $('#collapseBtn')?.addEventListener('click', toggleNav);
+  $('#missionBtn')?.addEventListener('click', toggleMission);
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && (Layout.navOpen || Layout.missionOpen)) closeDrawers(true);
+  });
+  // Lightweight focus loop so Tab cannot escape an open drawer.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Tab' || !isCompact() || !(Layout.navOpen || Layout.missionOpen)) return;
+    const host = Layout.navOpen ? $('#sidebar') : $('#mission');
+    if (!host) return;
+    const items = $$('button:not([disabled]),a[href],input:not([disabled]),select,textarea', host)
+      .filter(el => el.offsetParent !== null || el === document.activeElement);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  });
+}
+
 const kpi = (label, value, delta, ico, mono = false) => `
   <div class="card kpi"><div class="kpi-foot"></div>
     <div class="kpi-top"><span class="kpi-label">${esc(label)}</span>
@@ -130,6 +290,12 @@ function bindTooltips() {
     el.addEventListener('mouseenter', show);
     el.addEventListener('mousemove', show);
     el.addEventListener('mouseleave', () => box.classList.remove('show'));
+    // Touch devices have no hover: tap a point/cell to reveal its tooltip.
+    el.addEventListener('touchstart', show, { passive: true });
+    el.addEventListener('click', () => {
+      if (box.classList.contains('show')) box.classList.remove('show');
+      else show();
+    });
   });
 }
 function defs() {
@@ -226,7 +392,8 @@ function heatmapHtml(data, weeks, channels) {
     if (v < .65) return 'rgba(201,168,76,.6)';
     return `rgba(5,150,105,${.35 + v * .5})`;
   };
-  let html = `<div class="heat-grid" style="grid-template-columns:104px repeat(${weeks.length},1fr);position:relative">`;
+  // Wrap in a horizontal scroller so the heatmap stays readable on phones.
+  let html = `<div class="heat-scroll"><div class="heat-grid" style="grid-template-columns:104px repeat(${weeks.length},1fr);position:relative">`;
   html += `<div></div>` + weeks.map(w => `<div class="heat-lbl" style="text-align:center">${esc(w)}</div>`).join('');
   channels.forEach((ch, r) => {
     html += `<div class="heat-lbl">${esc(ch)}</div>`;
@@ -234,11 +401,18 @@ function heatmapHtml(data, weeks, channels) {
       html += `<div class="heat-cell" style="background:${colr(v)}" data-tt="${esc(`<b>${esc(ch)} · ${esc(weeks[c])}</b><br>Sentiment: ${Math.round(v * 100)}/100`)}"></div>`;
     });
   });
-  html += '</div>';
+  html += '</div></div>';
   return html;
 }
-let resizeTimer;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderCharts, 160); });
+let resizeTimer, wasCompact = isCompact();
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (isCompact() !== wasCompact) { wasCompact = isCompact(); onLayoutModeChange(); }
+    renderCharts();
+  }, 160);
+});
+window.addEventListener('orientationchange', () => setTimeout(onLayoutModeChange, 220));
 
 /* ------------------------------------------------------ Mission control --- */
 function renderMission() {
@@ -249,6 +423,8 @@ function renderMission() {
   const live = S.jobStatus === 'running';
   $('#missionStatus').textContent = live ? 'RUNNING' : 'IDLE';
   $('#missionStatus').classList.toggle('live', live);
+  const pulse = $('#missionPulse');
+  if (pulse) pulse.hidden = !live;   // signals activity when the drawer is closed
   const pct = S.progress || 0;
   let html = `<div class="progress-track"><i style="width:${pct}%"></i></div>
     <div class="tiny muted" style="margin-bottom:14px">Pipeline ${pct}% · ${live ? 'agents executing' : 'standing by'}</div>`;
@@ -800,12 +976,14 @@ async function refreshReports(extra = '') {
   catch (e) { toast(e.message, 'err'); }
 }
 function navigate(view, id) {
+  closeDrawers();                       // a nav tap must dismiss the mobile drawer
   S.view = view;
   if (id) S.reportId = id;
   const labels = {dashboard:'Dashboard', history:'Report History', report:'Intelligence Report',
                   compare:'Compare Mode', settings:'API Keys', guide:'User Guide'};
   $('#crumb').innerHTML = `<span>Meridian</span><b>/</b><strong>${labels[view] || view}</strong>`;
-  $$('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $$('.nav-item[data-view], .tabbar-item[data-view]')
+    .forEach(b => b.classList.toggle('active', b.dataset.view === view));
   const desired = view === 'report' ? `#/report/${S.reportId}` : `#/${view}`;
   if (location.hash !== desired) location.hash = desired;
   $('#chatDock').hidden = true;
@@ -963,13 +1141,13 @@ document.addEventListener('click', async (ev) => {
       toast(`Key applied to ${r.slots_updated} agent slots`, 'ok');
       await refreshChrome(); await renderView();
     }
+    else if (a === 'close-nav' || a === 'close-mission' || a === 'close-drawers') closeDrawers(true);
     else if (a === 'open-chat') await openChat();
     else if (a === 'close-chat') { $('#chatDock').hidden = true; $('#chatFab').style.display = ''; }
     else if (a === 'chat-suggest') { $('#chatInput').value = t.dataset.q; await sendChat(t.dataset.q); }
   } catch (e) { toast(e.message, 'err', 6500); }
 });
 $('#chatForm')?.addEventListener('submit', async (ev) => { ev.preventDefault(); await sendChat($('#chatInput').value); });
-$('#collapseBtn')?.addEventListener('click', () => { $('.shell').classList.toggle('collapsed'); setTimeout(renderCharts, 320); });
 $('#chatFab')?.addEventListener('click', () => openChat());
 window.addEventListener('hashchange', () => {
   const h = location.hash.replace(/^#\/?/, '');
@@ -978,6 +1156,7 @@ window.addEventListener('hashchange', () => {
 
 /* ---------------------------------------------------------------- Boot --- */
 (async function boot() {
+  initLayout();               // wire the menu / drawers before the first render
   try {
     S.boot = await api('/api/bootstrap');
     await refreshChrome();
