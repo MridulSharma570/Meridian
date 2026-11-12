@@ -58,6 +58,33 @@ here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — OpenRouter free-model auto-selection
+- `OpenRouter (Free)` now defaults to **Auto — best free model (live)** instead
+  of a hard-coded, retired `:free` slug. A new `app/api/openrouter_auto.py`
+  queries the public `/api/v1/models` catalogue (no key, no credits), keeps
+  zero-price text→text chat models, ranks them by context, output length,
+  JSON/tool support, published benchmark scores, freshness and model size,
+  and caches the result for 15 minutes.
+- All-free `models` failover chains plus local re-resolution on 404/429/5xx;
+  failed models are cooled down for five minutes and a 404 forces a catalogue
+  refresh. Offline or disabled mode degrades to `openrouter/free` with no
+  hard-coded, possibly retired slugs. `openrouter/auto` and paid fallbacks are
+  never used.
+- The router now reports OpenRouter's authoritative `response.model` (the free
+  model that actually answered) instead of the requested sentinel, and omits
+  `response_format` when the selected model does not support structured output.
+- Settings gains a live ranking panel with a refresh action, friendly labels
+  for the auto sentinels, and `GET /api/settings/openrouter/models`. The
+  Streamlit settings page shows the same ranking. Any `:free` slug can be
+  pinned; paid slugs are rejected on a free provider.
+- Existing keys with the retired `llama-3-8b-instruct:free` /
+  `mistral-7b-instruct:free` slugs are transparently upgraded to Auto.
+- 26 new mocked regression tests (`tests/test_openrouter_auto.py`, including
+  one against the real `/api/v1/models` payload shape); suite now 85 tests.
+  New optional env vars: `MERIDIAN_OPENROUTER_AUTO`,
+  `MERIDIAN_OPENROUTER_CATALOG_TTL`, `MERIDIAN_OPENROUTER_CATALOG_TIMEOUT`,
+  `MERIDIAN_OPENROUTER_FALLBACKS`.
+
 ### Added — Responsive layout
 - Complete breakpoint system (≤1500 / ≤1280 / ≤1100 / ≤700 / ≤480 / ≤380 /
   ≥1800 / short landscape / reduced motion), plus iOS safe-area insets and

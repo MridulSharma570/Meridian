@@ -67,7 +67,7 @@ complete demo report so the dashboard is never empty. Interactive API docs:
 ```bash
 python run.py --streamlit           # optional Streamlit frontend on :8501
 python -m scripts.seed_data         # four curated demo reports
-pytest -q                          # 59 tests
+pytest -q                          # 85 tests
 docker compose up -d --build        # full stack: app + Postgres + Redis
 ```
 
@@ -153,7 +153,7 @@ meridian/
 ├── scripts/     setup_db.py · seed_data.py · migrate.py · healthcheck.py
 │                keepalive.py (external Render pinger)
 └── tests/       test_agents · test_api_router · test_export · test_database
-                 test_render_deployment
+                 test_render_deployment · test_openrouter_auto
 ```
 
 ---
@@ -170,6 +170,17 @@ Open **Settings → API Keys** in the app (or **API Keys** in Streamlit).
 - **Mix providers?** Just pick a different provider per card.
 - **Test Connection** makes a real minimal request and reports provider, latency
   and quota headers.
+- **OpenRouter (Free) auto-selection:** the default model is
+  **Auto — best free model (live)**. Meridian reads OpenRouter's public
+  `GET /api/v1/models` catalogue, keeps only zero-price text→text chat models,
+  ranks them (context window, output length, JSON/tool support, published
+  benchmark scores, freshness) and attaches an **all-free** fallback chain. A retired or rate-limited `:free`
+  model is replaced automatically; OpenRouter's `openrouter/auto` and paid
+  models are never used, so the free tier stays free. Inspect the current
+  ranking in **Settings → Auto-select the best available free model** or at
+  `GET /api/settings/openrouter/models`. Retired hard-coded slugs in existing
+  saved keys are upgraded automatically. See
+  [docs/API_KEYS_SETUP.md](docs/API_KEYS_SETUP.md#3-openrouter-free).
 - Keys are **Fernet-encrypted before storage**; only masked values are returned
   to the browser. They are never logged, exported or committed.
 

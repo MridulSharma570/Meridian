@@ -19,7 +19,7 @@
 |----------|------|----------------|----------|
 | Groq | FREE | Generous rate limits | Fastest inference, great default |
 | Google Gemini | FREE | Free tier | Multimodal, huge context |
-| OpenRouter (Free) | FREE | Free model catalogue | Trying many models |
+| OpenRouter (Free) | FREE | Auto-selected live `:free` catalogue | Always-current free LLM, zero cost |
 | Hugging Face | FREE | Inference credits | Open-source models |
 | Cohere (Trial) | FREE | Trial key | Command-R |
 | Cerebras | FREE | Free tier | Very fast Llama |
@@ -46,11 +46,60 @@ Groq exposes rate-limit headers, which Meridian stores as quota info after a tes
 3. Select `Google Gemini` and model `gemini-2.0-flash`.
 Meridian calls Gemini through its OpenAI-compatible endpoint.
 
-### 3. OpenRouter (Free)
+### 3. OpenRouter (Free) — automatic best-free-model selection
 1. Sign up at **https://openrouter.ai/** → **https://openrouter.ai/keys**.
-2. Create a key (`sk-or-v1-…`) — no card needed for free models.
-3. Choose `OpenRouter (Free)` and `meta-llama/llama-3-8b-instruct:free`.
-4. Check your remaining credits at https://openrouter.ai/activity.
+2. Create a key (`sk-or-v1-…`) — no card is needed for free models.
+3. Choose `OpenRouter (Free)` and leave the model as
+   **Auto — best free model (live)** (the default). Paste the key and save.
+4. Press **Test connection**. The result shows the actual free model that
+   answered, because Meridian reports OpenRouter's `response.model` field.
+
+**What happens on every request**
+
+- Meridian queries the public `GET https://openrouter.ai/api/v1/models`
+  catalogue. This call needs **no API key** and consumes no credits. The
+  ranked list is cached for 15 minutes (`MERIDIAN_OPENROUTER_CATALOG_TTL`).
+- Only currently **zero-price**, text-in/text-out models served by
+  `/chat/completions` are kept. Paid models, embeddings, image/audio models,
+  routers and expired previews are discarded.
+- Candidates are ranked by context window, maximum output tokens, structured
+  output (JSON) support, tool support, published Artificial Analysis benchmark
+  scores, freshness and a penalty for very small or preview models. The top one
+  is sent as `model`.
+- An **all-free** `models` fallback array is attached. If the primary is
+  retired (404), rate-limited (429) or unavailable (5xx), OpenRouter tries the
+  next free model. Meridian also re-resolves locally, cools the failed model
+  down for five minutes and forces a catalogue refresh on 404/410.
+- A hard requirement: **no paid model is ever used**. `openrouter/auto` is
+  deliberately not used because it can select a billable model. Paid fallbacks
+  are never added, and `save_key()` rejects non-`:free` slugs on this provider.
+
+**Other choices in the model dropdown**
+
+| Option | Behaviour |
+|--------|-----------|
+| `Auto — best free model (live)` (default) | Deterministic ranking of the live free catalogue, with free failovers. Recommended. |
+| `OpenRouter free router (random)` | OpenRouter's own `openrouter/free` router: capability-aware but picks a free model at random. Used as the last-resort fallback. |
+| A specific `…:free` slug | Reproducible; pin it if you need identical outputs. You can pin any currently free slug, even one not pre-listed. If OpenRouter retires it, Meridian falls back to its local analytical engine — switch back to Auto. |
+
+**Inspect / control it**
+
+- Settings → **Auto-select the best available free model** shows the current
+  ranking, catalogue source (`LIVE` / `CACHED` / `OFFLINE FALLBACK`) and a
+  **Refresh** button. The same data is available at
+  `GET /api/settings/openrouter/models?refresh=true`.
+- `MERIDIAN_OPENROUTER_AUTO=false` disables ranking and always uses
+  `openrouter/free`. `MERIDIAN_OPENROUTER_CATALOG_TIMEOUT`,
+  `MERIDIAN_OPENROUTER_CATALOG_TTL` and `MERIDIAN_OPENROUTER_FALLBACKS` tune
+  the lookup; see [`.env.example`](../.env.example).
+- If the catalogue is unreachable, auto mode degrades to `openrouter/free`
+  with no hard-coded `:free` slugs. Nothing is billed either way.
+
+Older Meridian releases hard-coded `meta-llama/llama-3-8b-instruct:free` and
+`mistralai/mistral-7b-instruct:free`; both have been retired upstream. Saved
+keys using either slug are transparently upgraded to Auto on read, so no
+manual migration is needed. Check your remaining credits at
+https://openrouter.ai/activity.
 
 ### 4. Hugging Face
 1. Create an account → **https://huggingface.co/settings/tokens**.

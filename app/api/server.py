@@ -379,6 +379,12 @@ def test_key(body: KeySlotRequest):
     return services.test_key(body.slot)
 
 
+@app.get("/api/settings/openrouter/models", tags=["Settings"])
+def openrouter_models(refresh: bool = Query(False)):
+    """Live free OpenRouter models ranked for auto-selection (no key needed)."""
+    return services.openrouter_free_models(refresh=refresh)
+
+
 @app.delete("/api/settings/keys/{slot}", tags=["Settings"])
 def delete_key(slot: str):
     return services.delete_key(slot)

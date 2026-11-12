@@ -38,6 +38,23 @@ def render() -> None:
                 else:
                     st.error("Paste a key first.")
 
+    with st.expander("✨ OpenRouter — auto-select the best free model"):
+        from app.api.openrouter_auto import describe
+        auto = describe(force=st.button("Refresh free catalogue", key="or_refresh"))
+        st.caption(f"Source: {auto['source']} · {auto['count']} free chat models · "
+                   f"checked {auto['fetched_at']}")
+        if auto["enabled"]:
+            st.success(f"Recommended now: `{auto['recommended']}`")
+        else:
+            st.warning("Auto-selection is disabled (MERIDIAN_OPENROUTER_AUTO=false).")
+        st.dataframe([{"Model": m["id"], "Context": m["context_length"],
+                       "Score": m["score"], "JSON": m["supports_json"]}
+                      for m in auto["models"][:10]],
+                     use_container_width=True, hide_index=True)
+        st.caption("Choose **Auto — best free model (live)** in an OpenRouter (Free) slot. "
+                   "Meridian ranks the live zero-price catalogue and retries on an all-free "
+                   "fallback chain; paid models are never used.")
+
     st.markdown("### Agent key slots")
     cols = st.columns(2)
     for i, slot in enumerate(payload["slots"]):
@@ -53,7 +70,10 @@ def render() -> None:
             prov = st.selectbox("Provider", provider_keys, index=default_idx,
                                 format_func=lambda k: labels[k], key=f"prov_{slot['slot']}")
             spec = next(p for p in payload["providers"] if p["key"] == prov)
-            model = st.selectbox("Model", spec["models"], key=f"model_{slot['slot']}")
+            labels = spec.get("model_labels") or {}
+            model = st.selectbox("Model", spec["models"],
+                                 format_func=lambda m: labels.get(m, m),
+                                 key=f"model_{slot['slot']}")
             key = st.text_input("API key (blank keeps the stored one)", type="password",
                                 placeholder=spec["key_hint"], key=f"key_{slot['slot']}")
             b1, b2, b3 = st.columns(3)

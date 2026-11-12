@@ -50,7 +50,7 @@ streamlit run app/main.py                 # same, directly
 python -m scripts.setup_db                # create/verify schema + demo user
 python -m scripts.migrate                 # idempotent column migration
 python -m scripts.seed_data               # four curated demo reports
-pytest -q                                 # 59-test verification suite
+pytest -q                                 # 85-test verification suite
 python -m compileall app                  # syntax smoke test
 ```
 

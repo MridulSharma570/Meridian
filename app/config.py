@@ -122,6 +122,12 @@ class Settings:
     max_workers: int = _int_env("MERIDIAN_MAX_WORKERS", 6)
     agent_timeout_s: float = _float_env("MERIDIAN_AGENT_TIMEOUT", 45.0)
 
+    # OpenRouter free-model auto-selection (see app/api/openrouter_auto.py).
+    openrouter_auto_enabled: bool = _bool("MERIDIAN_OPENROUTER_AUTO", True)
+    openrouter_catalog_ttl: int = _int_env("MERIDIAN_OPENROUTER_CATALOG_TTL", 900)
+    openrouter_catalog_timeout: float = _float_env("MERIDIAN_OPENROUTER_CATALOG_TIMEOUT", 5.0)
+    openrouter_max_fallbacks: int = _int_env("MERIDIAN_OPENROUTER_FALLBACKS", 4)
+
     signature_trio: Tuple[str, str, str] = ("#0A1628", "#C9A84C", "#EDE4D3")
 
     @property
