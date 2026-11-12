@@ -1,0 +1,41 @@
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.coverage
+htmlcov/
+
+# --- Meridian runtime data (secrets stay local) -----------------------------
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+.fernet_key
+*.fernet_key
+exports/
+
+# --- Environment / secrets --------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- Editors / OS -----------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Streamlit --------------------------------------------------------------
+.streamlit/secrets.toml
