@@ -56,6 +56,6 @@ Meridian is designed around a BYOK (bring your own key) model:
 
 ## Out of scope
 
-Reports generated in `simulated` data mode are model estimates, not verified
+Reports generated in explicit `sample` data mode are deterministic demo data, not verified
 financial facts. See the `confidence_note` and the Fact-Checker's ⚠️ flags before
 any external or investment use.

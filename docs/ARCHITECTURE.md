@@ -93,8 +93,10 @@ Each node is wrapped by `BaseAgent.run()`:
 2. The thread builds an `Orchestrator` whose `emit` callback appends events to a
    condition-protected list. `GET /api/reports/{id}/events` streams them as SSE.
 3. `collect_market_data()` runs five connectors in parallel under a six-second
-   budget, overlaying successful live results on the deterministic baseline.
-   `data_mode` is `live` (3+ connectors), `hybrid` (1–2) or `simulated` (0).
+   budget. In production it strips fabricated citations/headlines, zeroes
+   unsupported numeric series and records only retrieved items in
+   `verified_sources`; `answer_policy.require_evidence()` refuses the report
+   when that list is empty.
 4. Agent outputs are persisted as JSONB columns; the Writer's markdown goes to
    `final_report`; the reliability score comes from the Fact-Checker.
 5. `generate_exports()` writes PDF / PPTX / XLSX into `data/exports/`, then the
@@ -106,10 +108,10 @@ Each node is wrapped by `BaseAgent.run()`:
 
 | Failure | Behaviour |
 |---------|-----------|
-| No API key anywhere | Full pipeline via local analytical engine |
-| Provider 401 / 429 / timeout | Warning + local fallback, other agents continue |
-| Malformed LLM JSON | `extract_json()` repair, then local fallback |
-| Connector unreachable | That connector marked `offline`, report continues |
+| No API key anywhere | Structured `409 answer_unavailable`; no report/chat/translation/comparison is generated |
+| Provider 401 / 429 / timeout | The affected answer fails; no template substitute is published |
+| Malformed LLM JSON | `extract_json()` repair is attempted; unusable output fails the step |
+| Connector unreachable | That connector is marked `offline`; if no live evidence remains, the report is refused |
 | PostgreSQL/Redis down | SQLite / no cache |
 | Export engine error | PDF falls back to a minimal valid PDF; other exports isolated |
 | Undecryptable stored key | Slot treated as unconfigured, clear Settings message |

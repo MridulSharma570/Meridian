@@ -68,5 +68,5 @@ pytest -q                          # must be green before you open a PR
 
 Open an issue with the exact steps, the endpoint or view, the full error text
 (never include an API key), your OS/Python version, and your `data_mode`
-(simulated / hybrid / live). Security issues go through [SECURITY.md](SECURITY.md),
+(sample / unverified / verified). Security issues go through [SECURITY.md](SECURITY.md),
 not public issues.

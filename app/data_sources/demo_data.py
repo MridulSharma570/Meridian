@@ -1,7 +1,8 @@
-"""Meridian's local analytical engine.
+"""Meridian's offline SAMPLE engine (explicit opt-in only).
 
-When no external API keys or network access are available, Meridian still
-produces a complete, internally consistent, *query-aware* market dataset.
+Production Meridian never uses this module to answer a user. When
+``MERIDIAN_SAMPLE_MODE`` is explicitly enabled for tests/UI demos, it produces
+an internally consistent, *query-aware* sample dataset.
 The output is deterministic (seeded by the query + filters) so a saved report
 always reproduces its charts exactly. Live connectors overwrite pieces of this
 dataset when they succeed; ``data_mode`` records which path was used.
@@ -59,14 +60,13 @@ REGION_FACTOR = {
 }
 PERIOD_YEARS = {"12M": 1, "3Y": 3, "5Y": 5, "10Y": 10}
 
+# SAMPLE PLACEHOLDERS ONLY. The offline engine must never attach a real
+# publisher's name or a real domain to a headline it generated itself: that
+# reads as a genuine citation and is exactly the misinformation we are
+# removing. ``example.invalid`` is reserved by RFC 2606 and cannot resolve.
 PUBLISHERS = [
-    ("Reuters", "reuters.com", 96), ("Bloomberg", "bloomberg.com", 95),
-    ("Financial Times", "ft.com", 94), ("McKinsey & Company", "mckinsey.com", 92),
-    ("Gartner", "gartner.com", 91), ("Statista", "statista.com", 88),
-    ("The Economic Times", "economictimes.indiatimes.com", 86),
-    ("World Bank", "worldbank.org", 97), ("TechCrunch", "techcrunch.com", 82),
-    ("Harvard Business Review", "hbr.org", 90), ("IDC", "idc.com", 89),
-    ("Business Standard", "business-standard.com", 85),
+    (f"SAMPLE SOURCE {i:02d} (not a real citation)", "example.invalid", 0)
+    for i in range(1, 13)
 ]
 
 _STOP = {"the", "a", "an", "of", "in", "for", "and", "vs", "versus", "market",
@@ -200,7 +200,8 @@ def build_market_dataset(query: str, region: str = "Global",
         pub, domain, rel = PUBLISHERS[i % len(PUBLISHERS)]
         news.append({
             "title": h, "source": pub, "domain": domain,
-            "url": f"https://www.google.com/search?q={h.replace(' ', '+')}",
+            "url": f"https://example.invalid/sample/headline/{i+1}",
+            "sample": True, "verified": False,
             "date": (today - timedelta(days=rng.randint(1, 60))).isoformat(),
             "sentiment": round(rng.uniform(0.25, 0.94), 2),
             "reliability": rel,
@@ -210,16 +211,18 @@ def build_market_dataset(query: str, region: str = "Global",
     for i in range(12):
         pub, domain, rel = PUBLISHERS[i % len(PUBLISHERS)]
         sources.append({
-            "id": f"S{i+1:02d}", "title": f"{meta['label']} {region} outlook — {pub} research brief {today.year}",
-            "publisher": pub, "url": f"https://www.{domain}/", "type":
+            "id": f"S{i+1:02d}", "title": f"SAMPLE — {meta['label']} {region} outlook (not a real source)",
+            "publisher": pub, "url": f"https://example.invalid/sample/{i+1}", "type":
             ["Market Data", "News", "Financial Filing", "Macro Indicator", "Expert Analysis"][i % 5],
             "year": today.year - (i % 3), "reliability": rel,
+            "sample": True, "verified": False,
         })
 
     return {
         "company": company, "sector": meta["label"], "sector_key": sector_key,
         "region": region, "period": period, "as_of": today.isoformat(),
-        "query": query, "data_mode": "simulated",
+        "query": query, "data_mode": "sample", "sample": True,
+        "verified": False, "verified_sources": [], "unverified_metrics": True,
         "market_size_usd_b": round(base, 2), "cagr_pct": round(cagr, 2),
         "forecast_growth_pct": round(cagr * rng.uniform(0.9, 1.15), 2),
         "history": [{"year": y, "value": v} for y, v in zip(years, history)],
@@ -246,9 +249,9 @@ def build_market_dataset(query: str, region: str = "Global",
              "impact": "Low"},
         ],
         "confidence_note": (
-            "Figures are model-generated from Meridian's offline analytical engine. "
-            "Connect a live data source or an LLM provider in Settings to replace them "
-            "with real-time verified figures."
+            "SAMPLE MODE: every figure, headline and 'source' here is generated "
+            "deterministically for UI testing. None of it is real research. "
+            "Configure a provider API key and live data connectors for real answers."
         ),
     }
 

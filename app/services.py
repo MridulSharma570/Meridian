@@ -16,8 +16,9 @@ from typing import Any, Dict, Generator, List, Optional
 from app.agents.chat_agent import ChatAgent
 from app.agents.orchestrator import Orchestrator
 from app.agents.translator import SUPPORTED_LANGUAGES, TranslatorAgent
-from app.api import key_manager
-from app.api.llm_router import test_connection
+from app.api import answer_policy, key_manager
+from app.api.llm_router import call_llm, effective_slot, test_connection
+from app.agents.base import extract_json
 from app.api.providers import list_providers
 from app.config import AGENT_SLOTS, EXPORT_DIR, REGIONS, PERIODS, settings
 from app.database import queries
@@ -91,6 +92,22 @@ def generate_exports(report_id: str) -> Dict[str, str]:
     return paths
 
 
+
+def _report_is_verified(row: Dict[str, Any]) -> bool:
+    """True only for reports actually produced from a provider + live sources."""
+    dataset = (row.get("researcher_output") or {}).get("dataset") or {}
+    writer = row.get("writer_output") or {}
+    return bool(writer.get("verified_answer") and dataset.get("verified_sources"))
+
+
+def _require_verified_report(row: Dict[str, Any]) -> None:
+    if answer_policy.strict_mode() and not _report_is_verified(row):
+        raise answer_policy.AnswerUnavailable(
+            "This report was not produced from a configured API and live "
+            "sources, so Meridian will not present it as a verified answer.",
+            "Generate a new report after saving a provider API key in Settings.",
+            "unverified_report")
+
 def _persist_state(report_id: str, state: Dict[str, Any]) -> None:
     from datetime import datetime
     translation = state.get("translation", {})
@@ -141,13 +158,19 @@ def _worker(report_id: str, query: str, region: str, period: str, language: str)
             queries.update_report(report_id, status="failed", error_message=str(exc))
         except Exception:
             pass
-        emit({"type": "job_failed", "report_id": report_id, "error": str(exc),
-              "trace": traceback.format_exc()[-1200:]})
+        payload = {"type": "job_failed", "report_id": report_id, "error": str(exc),
+                   "trace": traceback.format_exc()[-1200:]}
+        if isinstance(exc, answer_policy.AnswerUnavailable):
+            payload.update({"error_type": "answer_unavailable", "reason": exc.reason,
+                            "hint": exc.hint,
+                            "setup_path": exc.as_dict()["setup_path"]})
+        emit(payload)
 
 
 def start_report(query: str, *, region: str = "Global", period: str = "3Y",
                  language: str = "en", company: str = "") -> str:
     """Create a report and run the agent graph in a background thread."""
+    answer_policy.require_api("research report")
     query = (query or "").strip()
     if len(query) < 3:
         raise ValueError("Please enter a research query of at least 3 characters")
@@ -233,9 +256,19 @@ def report_context(report_id: str) -> Dict[str, Any]:
     row = queries.get_report(report_id)
     if not row:
         raise KeyError("Report not found")
-    dataset = (row.get("researcher_output") or {}).get("dataset") or \
-        collect_market_data(row["query"], row.get("region", "Global"),
-                            row.get("period", "3Y"))
+    dataset = (row.get("researcher_output") or {}).get("dataset")
+    if not dataset and answer_policy.strict_mode():
+        raise answer_policy.AnswerUnavailable(
+            "This saved report has no verified research context.",
+            "Generate a new report with a configured provider API key.",
+            "no_verified_context")
+    dataset = dataset or collect_market_data(row["query"], row.get("region", "Global"),
+                                             row.get("period", "3Y"))
+    if answer_policy.strict_mode() and not (dataset.get("verified_sources") or []):
+        raise answer_policy.AnswerUnavailable(
+            "This saved report has no verified live sources.",
+            "Generate a new report with a configured provider API key and live sources.",
+            "no_verified_context")
     return {
         "query": row["query"], "region": row.get("region", "Global"),
         "period": row.get("period", "3Y"), "report_id": report_id,
@@ -249,6 +282,7 @@ def report_context(report_id: str) -> Dict[str, Any]:
 
 
 def answer_chat(report_id: str, question: str) -> Dict[str, Any]:
+    answer_policy.require_api("chat answer")
     question = (question or "").strip()
     if not question:
         raise ValueError("Question cannot be empty")
@@ -259,6 +293,8 @@ def answer_chat(report_id: str, question: str) -> Dict[str, Any]:
 
 
 def translate_report(report_id: str, language: str) -> Dict[str, Any]:
+    if language != "en":
+        answer_policy.require_api("translation")
     ctx = report_context(report_id)
     markdown = (ctx["writer"].get("markdown") or
                 queries.get_report(report_id).get("final_report") or "")
@@ -276,14 +312,23 @@ def dashboard_payload(report_id: str, region: str = "", period: str = "",
     row = queries.get_report(report_id)
     if not row:
         raise KeyError("Report not found")
+    _require_verified_report(row)
     region = region or row.get("region", "Global")
     period = period or row.get("period", "3Y")
-    dataset = collect_market_data(row["query"], region, period)
+    if answer_policy.strict_mode():
+        # Filters must not pretend to recompute evidence that was never
+        # collected for another region/period. Snap back to the report's own
+        # verified scope; a different scope requires a new report.
+        region = row.get("region", region)
+        period = row.get("period", period)
+    dataset = ((row.get("researcher_output") or {}).get("dataset")
+               or collect_market_data(row["query"], region, period))
     analyst = row.get("analyst_output") or {}
     forecast = row.get("forecast_output") or {}
     factcheck = row.get("factcheck_output") or {}
     writer = row.get("writer_output") or {}
     selected = competitor or (dataset["competitors"][0]["name"] if dataset["competitors"] else "")
+    dataset["confidence_note"] = answer_policy.provenance_note(dataset)
     return {
         "report": {k: row.get(k) for k in
                    ("id", "query", "company", "region", "period", "status", "language",
@@ -314,9 +359,69 @@ def dashboard_payload(report_id: str, region: str = "", period: str = "",
                    "markdown": writer.get("markdown", ""),
                    "citations": writer.get("citations", [])},
         "selected_competitor": next((c for c in dataset["competitors"]
-                                     if c["name"] == selected), dataset["competitors"][0]),
+                                     if c["name"] == selected),
+                                    dataset["competitors"][0] if dataset["competitors"] else {}),
+        "readiness": answer_policy.readiness(),
         "agent_logs": queries.get_agent_logs(report_id),
         "sources": dataset["sources"],
+    }
+
+
+def _verified_comparison(company_a: str, company_b: str,
+                          region: str) -> Dict[str, Any]:
+    """Compare two companies using an LLM and real sources, never fake metrics."""
+    da = collect_market_data(company_a, region)
+    db = collect_market_data(company_b, region)
+    sources = (da.get("verified_sources") or []) + (db.get("verified_sources") or [])
+    answer_policy.require_evidence({"verified_sources": sources})
+    prompt = (
+        "Compare these two companies for a market-intelligence scorecard. "
+        "Return JSON with keys: verdict (2-3 sentences, grounded only in the "
+        "VERIFIED SOURCES), metrics (array of exactly 5 objects with metric, a, b, "
+        "unit, note). Set a and b to 0 unless a real figure appears in the sources; "
+        "in that case put the exact figure and its source id in note. Never invent "
+        "a number, publisher, URL or citation.\n\n"
+        f"COMPANY A: {company_a}\nCOMPANY B: {company_b}\nREGION: {region}\n\n"
+        f"VERIFIED SOURCES:\n" + str(sources)[:6000]
+    )
+    try:
+        res = call_llm(effective_slot("analyst"),
+                       "You are an evidence-bound market analyst. Return only valid JSON.",
+                       prompt, max_tokens=900, temperature=0.2, json_mode=True,
+                       timeout=settings.agent_timeout_s)
+    except Exception as exc:
+        raise answer_policy.AnswerUnavailable(
+            f"The configured provider could not produce a comparison: {exc}",
+            "Check the key, model and quota in Settings → API Keys.",
+            "provider_failed") from exc
+    parsed = extract_json(res["text"])
+    if not isinstance(parsed, dict):
+        raise answer_policy.AnswerUnavailable(
+            "The provider returned an unusable comparison; no scorecard was invented.",
+            "Try a different model in Settings → API Keys.", "unusable_output")
+    raw = parsed.get("metrics")
+    metrics = []
+    for m in (raw if isinstance(raw, list) else [])[:5]:
+        if not isinstance(m, dict):
+            continue
+        try:
+            a_val, b_val = float(m.get("a") or 0), float(m.get("b") or 0)
+        except (TypeError, ValueError):
+            a_val, b_val = 0.0, 0.0
+        metrics.append({"metric": str(m.get("metric") or "Unverified dimension")[:80],
+                        "a": a_val, "b": b_val,
+                        "unit": str(m.get("unit") or "")[:12],
+                        "note": str(m.get("note") or "No verified figure")[:200]})
+    while len(metrics) < 5:
+        metrics.append({"metric": f"Dimension {len(metrics)+1} (not available)",
+                        "a": 0.0, "b": 0.0, "unit": "",
+                        "note": "No verified figure was supplied by a live source."})
+    return {
+        "company_a": company_a, "company_b": company_b, "region": region,
+        "metrics": metrics, "dataset_a": da, "dataset_b": db,
+        "verdict": str(parsed.get("verdict") or "No verified verdict available.")[:600],
+        "verified_sources": sources, "data_mode": "verified",
+        "provider": res["provider"], "model": res["model"],
     }
 
 
@@ -325,7 +430,10 @@ def compare_companies(company_a: str, company_b: str, region: str = "Global") ->
         raise ValueError("Both company names are required")
     if company_a.strip().lower() == company_b.strip().lower():
         raise ValueError("Please choose two different companies")
-    data = build_comparison(clean_company(company_a), clean_company(company_b), region)
+    answer_policy.require_api("company comparison")
+    a, b = clean_company(company_a), clean_company(company_b)
+    data = (build_comparison(a, b, region) if answer_policy.sample_mode()
+            else _verified_comparison(a, b, region))
     try:
         queries.save_comparison(data["company_a"], data["company_b"],
                                 {"metrics": data["metrics"], "verdict": data["verdict"]})
@@ -338,6 +446,8 @@ def compare_reports(report_a: str, report_b: str) -> Dict[str, Any]:
     a, b = queries.get_report(report_a), queries.get_report(report_b)
     if not a or not b:
         raise KeyError("One or both reports were not found")
+    _require_verified_report(a)
+    _require_verified_report(b)
     def summary(r):
         da = (r.get("analyst_output") or {})
         ds = (r.get("researcher_output") or {}).get("dataset") or {}
@@ -364,7 +474,8 @@ def settings_payload() -> Dict[str, Any]:
                       for c, n, nat in SUPPORTED_LANGUAGES],
         "regions": list(REGIONS), "periods": list(PERIODS),
         "encryption": "Fernet (AES-128-CBC + HMAC-SHA256)",
-        "demo_mode": settings.demo_mode,
+        "demo_mode": answer_policy.sample_mode(),
+        "readiness": answer_policy.readiness(),
         "configured_count": sum(1 for s in key_manager.key_status() if s["configured"]),
     }
 
@@ -409,6 +520,7 @@ def export_path(report_id: str, fmt: str) -> str:
     row = queries.get_report(report_id)
     if not row:
         raise KeyError("Report not found")
+    _require_verified_report(row)
     key = {"pdf": "pdf_path", "pptx": "pptx_path", "excel": "excel_path"}.get(fmt)
     if not key:
         raise ValueError("Unsupported format")
@@ -433,7 +545,7 @@ def wait_for_bootstrap(timeout_s: float = 3.0) -> bool:
 
     Health checks and the ASGI lifespan never call this — Render must see a
     listening socket immediately. Waiting a couple of seconds here simply
-    avoids showing an empty dashboard while the demo report is being seeded.
+    avoids racing the background schema warm-up on first page load.
     """
     deadline = time.time() + max(0.0, timeout_s)
     while not _BOOTSTRAP_DONE and time.time() < deadline:
@@ -442,11 +554,11 @@ def wait_for_bootstrap(timeout_s: float = 3.0) -> bool:
 
 
 def bootstrap() -> None:
-    """Guarantee the product never opens empty: seed one complete demo report.
+    """Prepare the schema; never manufacture a sample report on first load.
 
-    This may take a few seconds (network connectors + agent pipeline), so the
-    server calls it from a background thread. It must never sit in the ASGI
-    lifespan startup path: Render aborts deploys whose port scan times out.
+    A fresh install with no API key must open to an honest empty dashboard and
+    a "connect an API key" prompt. Sample reports are only seeded when the
+    operator explicitly enables ``MERIDIAN_SAMPLE_MODE``.
     """
     global _BOOTSTRAPPED, _BOOTSTRAP_DONE, _BOOTSTRAP_ERROR
     if _BOOTSTRAPPED:
@@ -454,13 +566,11 @@ def bootstrap() -> None:
     _BOOTSTRAPPED = True
     try:
         ensure_schema()
-        existing = queries.list_reports(limit=1)
-        if not existing:
-            logger.info("Bootstrapping Meridian with a complete sample report")
+        if answer_policy.sample_mode() and not queries.list_reports(limit=1):
+            logger.info("SAMPLE MODE: seeding one clearly labelled offline report")
             rid = start_report("Global artificial intelligence platforms market 2026",
                                region="Global", period="5Y", language="en")
             job = get_job(rid)
-            # Wait briefly so the first page load already has a finished report.
             deadline = time.time() + 12
             while job and job.status == "processing" and time.time() < deadline:
                 time.sleep(0.1)

@@ -2,9 +2,10 @@
 
 **Meridian v1.0.0 · Developed by Mridul Sharma**
 
-> You do **not** need any of these to use Meridian. With no keys the full
-> seven-agent pipeline runs on the local analytical engine. Add keys only when
-> you want live LLM-written analysis, full neural translation or real data feeds.
+> You **do** need at least one provider key to generate answers. With no active
+> key, Meridian returns a structured `409 API key required` error for reports,
+> chat, translation and comparisons instead of running a template engine.
+> One key can serve every slot.
 >
 > Enter keys in **Settings → API Keys** (web app) or **API Keys** (Streamlit).
 > Each of the six agents has its own slot; the Translator is optional and
@@ -80,7 +81,7 @@ Meridian calls Gemini through its OpenAI-compatible endpoint.
 |--------|-----------|
 | `Auto — best free model (live)` (default) | Deterministic ranking of the live free catalogue, with free failovers. Recommended. |
 | `OpenRouter free router (random)` | OpenRouter's own `openrouter/free` router: capability-aware but picks a free model at random. Used as the last-resort fallback. |
-| A specific `…:free` slug | Reproducible; pin it if you need identical outputs. You can pin any currently free slug, even one not pre-listed. If OpenRouter retires it, Meridian falls back to its local analytical engine — switch back to Auto. |
+| A specific `…:free` slug | Reproducible; pin it if you need identical outputs. You can pin any currently free slug, even one not pre-listed. If OpenRouter retires it, the request fails cleanly — switch back to Auto. |
 
 **Inspect / control it**
 
@@ -214,8 +215,8 @@ Restart the server after editing `.env`. The data-mode badge changes to
 | `No key saved in this slot` | Press **Save key** before **Test connection** |
 | `HTTP 401` | Key is wrong/expired; regenerate at the provider |
 | `HTTP 429` | Quota or rate limit; wait or switch to a free provider |
-| `timed out` | Network blocked or model cold-starting; the local engine already completed the agent |
-| `returned unusable output` | Model ignored JSON mode; Meridian kept the local analysis |
+| `timed out` | Network blocked or model cold-starting; no answer was generated |
+| `returned unusable output` | Model ignored JSON mode; Meridian refused to publish a template substitute |
 | `Empty key for Ollama` | Ollama needs no key; leave the field blank on save |
 | `Stored credential could not be decrypted` | Fernet key changed — re-enter keys in Settings |
 

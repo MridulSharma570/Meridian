@@ -5,11 +5,18 @@ import streamlit as st
 
 from app import services
 from app.agents.chat_agent import ChatAgent
+from app.api import answer_policy
 
 
 def render() -> None:
     st.markdown("### 💬 Follow-up Intelligence")
     st.caption("Agent 4 answers using the research context already gathered in a saved report.")
+    ready = answer_policy.readiness()
+    if ready["sample_mode"]:
+        st.warning("SAMPLE MODE — chat uses offline sample context, not verified research.")
+    elif not ready["answers_enabled"]:
+        st.error(f"{ready['message']} {ready['hint']}")
+        return
     from app.database import queries
     rows = [r for r in queries.list_reports(limit=100) if r["status"] == "completed"]
     if not rows:

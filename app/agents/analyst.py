@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.agents.base import BaseAgent, compact
+from app.api import answer_policy
 
 
 class AnalystAgent(BaseAgent):
@@ -13,6 +14,8 @@ class AnalystAgent(BaseAgent):
     description = "Runs SWOT, PESTLE, Porter's Five Forces and market sizing"
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        if answer_policy.strict_mode():
+            return self._verified_scaffold(ctx)
         d = ctx.get("dataset") or ctx.get("researcher", {}).get("dataset", {})
         if not d:
             from app.data_sources.collector import collect_market_data
@@ -116,6 +119,50 @@ class AnalystAgent(BaseAgent):
                         f"{cagr:.1f}% CAGR. {company} leads at {leader['share']:.1f}% share, "
                         "but rivalry and buyer power keep margins contested."),
         }
+
+    @staticmethod
+    def _verified_scaffold(ctx: Dict[str, Any]) -> Dict[str, Any]:
+        """Neutral structure: no invented figures or strategic claims."""
+        d = ctx.get("dataset", {}) or {}
+        na = "Not available — no verified source supplied this figure."
+        swot = {k: [na] for k in ("Strengths", "Weaknesses", "Opportunities", "Threats")}
+        return {
+            "swot": swot,
+            "pestle": [{"factor": f, "impact": "Unknown", "score": 0, "note": na}
+                       for f in ("Political", "Economic", "Social", "Technological",
+                                 "Legal", "Environmental")],
+            "porter": [{"force": f, "intensity": 0, "note": na}
+                       for f in ("Competitive rivalry", "Threat of new entrants",
+                                 "Bargaining power of buyers", "Bargaining power of suppliers",
+                                 "Threat of substitutes")],
+            "sizing": {"TAM (USD B)": 0, "SAM (USD B)": 0, "SOM (USD B)": 0,
+                       "Base Year": d.get("as_of", ""), "CAGR (%)": 0,
+                       "Forecast CAGR (%)": 0, "Market Concentration": "Unknown",
+                       "note": na},
+            "trends": [], "key_metrics": [], "opportunities": [na], "threats": [na],
+            "growth_drivers": [], "risk_events": [],
+            "market_share": d.get("competitors", []), "segments": d.get("segments", []),
+            "summary": ("No verified quantitative analysis is available. The narrative "
+                        "below is grounded only in the live sources cited for this report."),
+            "unverified_metrics": True,
+        }
+
+    def strict_prompt(self, ctx: Dict[str, Any], scaffold: Dict[str, Any]) -> str:
+        sources = (ctx.get("dataset", {}) or {}).get("verified_sources") or []
+        return (
+            "Rewrite the strategic analysis for a market-intelligence report. "
+            "Return JSON with keys: summary (2 sentences), swot (object with "
+            "Strengths/Weaknesses/Opportunities/Threats arrays of short strings), "
+            "pestle (6 objects factor/impact/note), porter (5 objects force/intensity/note), "
+            "trends (array of objects trend/direction/confidence), key_metrics (array of "
+            "objects label/value/delta/tone — use 'not available' for values), "
+            "strategic_priorities (3 strings), growth_drivers (3 strings).\n\n"
+            "CRITICAL: no number in the context is measured. Use ONLY the VERIFIED "
+            "SOURCES; if they do not support a claim, say 'not available'. Never "
+            "invent a figure, publisher, URL or citation.\n\n"
+            f"QUERY: {compact(ctx.get('query', ''), 300)}\n"
+            f"VERIFIED SOURCES:\n{compact(sources, 4000)}\n"
+        )
 
     def llm_prompt(self, ctx: Dict[str, Any]) -> str:
         d = ctx.get("dataset", {})

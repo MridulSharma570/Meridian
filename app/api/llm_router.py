@@ -49,7 +49,25 @@ def is_configured(slot: str) -> bool:
 
 
 def configured_slots() -> List[str]:
-    return [k["slot"] for k in key_status() if k["configured"] and k["is_active"]]
+    try:
+        return [k["slot"] for k in key_status() if k["configured"] and k["is_active"]]
+    except Exception:
+        # Health checks may run before the key table exists.
+        return []
+
+
+def effective_slot(slot: str) -> str:
+    """Pick a real configured API slot for an agent.
+
+    Users often save a single key and use "apply to all" later. In verified
+    mode an agent must reach a provider, so an unconfigured slot borrows any
+    active configured slot instead of silently falling back to templates.
+    """
+    resolved = resolve_slot(slot)
+    if is_configured(resolved):
+        return resolved
+    slots = configured_slots()
+    return slots[0] if slots else resolved
 
 
 def _endpoint(p: Provider) -> str:

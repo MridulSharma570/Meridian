@@ -52,9 +52,10 @@ pip install -r requirements.txt
 python run.py                      # → http://localhost:8000
 ```
 
-That's it — **no API keys, no database setup, no Docker required**. On first boot
-Meridian creates its SQLite schema, generates a `0600` Fernet key and seeds one
-complete demo report so the dashboard is never empty. Interactive API docs:
+That's it — **no database setup or Docker required to boot**. On first boot
+Meridian creates its SQLite schema and generates a `0600` Fernet key. The
+dashboard opens empty with an **API key required** prompt; save at least one
+provider key in Settings before generating a report. Interactive API docs:
 **http://localhost:8000/docs**.
 
 > **Deploying to Render and the site keeps shutting down?** Render **Free** spins
@@ -66,8 +67,8 @@ complete demo report so the dashboard is never empty. Interactive API docs:
 
 ```bash
 python run.py --streamlit           # optional Streamlit frontend on :8501
-python -m scripts.seed_data         # four curated demo reports
-pytest -q                          # 88 tests
+MERIDIAN_SAMPLE_MODE=true python -m scripts.seed_data  # optional SAMPLE reports
+pytest -q                          # 101 tests
 docker compose up -d --build        # full stack: app + Postgres + Redis
 ```
 
@@ -78,14 +79,14 @@ docker compose up -d --build        # full stack: app + Postgres + Redis
 | Capability | Detail |
 |------------|--------|
 | **7-agent pipeline** | Researcher → Analyst → (Writer ‖ Forecast ‖ Fact-Checker) → Chat → Translator, orchestrated as a LangGraph-style typed state DAG with parallel fan-out |
-| **Failure isolation** | A missing key, 401, 429, timeout or malformed JSON never stops a report — each agent falls back to the local analytical engine and logs a warning |
+| **Fail-closed answers** | A missing key, provider failure, malformed JSON or missing live evidence returns a structured `409` — Meridian never substitutes a template/local answer |
 | **Independent API keys** | Six encrypted slots + optional translator, **16 free/paid providers**, per-slot model choice, real **Test Connection**, quota headers, "apply one key to all" |
-| **Works with zero keys** | A deterministic, query-aware analytical engine produces consistent market sizing, SWOT, PESTLE, Porter's Five Forces, sentiment, sources and a 12-month forecast — clearly labelled `simulated` |
-| **Live data** | Tavily / DuckDuckGo, Yahoo Finance, NewsAPI, Reddit sentiment, World Bank macro — parallel, time-boxed, failure-isolated; data mode becomes `hybrid` → `live` |
+| **API key required** | Reports, chat, translation and company comparisons require at least one active provider key. The deterministic engine exists only in explicitly enabled `MERIDIAN_SAMPLE_MODE` for offline tests/demos and is loudly labelled `SAMPLE` |
+| **Live evidence** | Tavily / DuckDuckGo, Yahoo Finance, NewsAPI, Reddit sentiment, World Bank macro — parallel and time-boxed. Only retrieved items become citable sources; unsupported chart series are zeroed placeholders, not measurements |
 | **Interactive charts** | Market trajectory, share donut, revenue trend, sentiment heatmap, segment bars, macro indicators, forecast with confidence band. Hand-built SVG: hover tooltips, togglable series, live region/period/competitor filters |
 | **Exports** | Paginated PDF with vector charts · 8-slide PowerPoint · 10-sheet Excel with native charts |
 | **Follow-up chat** | Grounded Q&A over the report context with citation ids and saved history |
-| **Translation** | 14 languages; full neural translation with a key, honest structural translation without one, markdown and tables preserved |
+| **Translation** | 14 languages; full neural translation with a configured provider. Without a key the request is refused (sample mode alone uses a labelled structural translation) |
 | **Compare** | Company vs company and report vs report, with verdicts and scorecards |
 | **History** | Search, filter, reopen, delete and compare every past report |
 | **Mission control** | Live agent status over Server-Sent Events, elapsed times, provider used, progress bar |
@@ -186,9 +187,9 @@ Open **Settings → API Keys** in the app (or **API Keys** in Streamlit).
 
 Step-by-step instructions for all 16 providers: [docs/API_KEYS_SETUP.md](docs/API_KEYS_SETUP.md).
 
-> The platform is fully functional **without any key**. Add keys to upgrade from
-> the deterministic local engine to live LLM-written analysis, neural
-> translation and real-time data.
+> The platform **boots** without a key, but it will not generate reports,
+> chat answers, translations or comparisons until at least one provider key is
+> saved. This is deliberate: plausible template output is not research.
 
 ---
 

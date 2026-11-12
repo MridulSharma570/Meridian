@@ -26,6 +26,7 @@ from app.agents.forecast_agent import ForecastAgent
 from app.agents.researcher import ResearcherAgent
 from app.agents.translator import TranslatorAgent
 from app.agents.writer import WriterAgent
+from app.api.answer_policy import AnswerUnavailable
 from app.config import AGENT_SLOTS, settings
 
 logger = logging.getLogger("meridian.orchestrator")
@@ -73,6 +74,10 @@ class Orchestrator:
         try:
             agent = AGENT_CLASSES[name](self.report_id, self._push)
             result = agent.run(state)
+        except AnswerUnavailable:
+            # Verified mode must fail closed. Never replace a missing/failed
+            # API or missing evidence with a plausible template result.
+            raise
         except Exception as exc:
             logger.exception("Agent %s failed hard; using safe fallback", name)
             result = AgentResult(agent=name, ok=False, data={"fallback": True},
@@ -124,6 +129,8 @@ class Orchestrator:
                 name = futures[fut]
                 try:
                     state[name] = fut.result().data
+                except AnswerUnavailable:
+                    raise
                 except Exception as exc:
                     state[name] = {"fallback": True, "error": str(exc)}
                 done += 1
