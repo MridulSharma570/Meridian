@@ -159,21 +159,37 @@ class ChatAgent(BaseAgent):
                                         or "")[:3500],
                 }, 5200)
             )
-            try:
-                res = call_llm(effective_slot("chat"),
-                               "You are a precise, evidence-bound research analyst.",
-                               prompt, max_tokens=420, temperature=0.3,
-                               timeout=settings.agent_timeout_s)
-            except Exception as exc:
-                raise answer_policy.AnswerUnavailable(
-                    f"The configured provider could not answer this question: {exc}",
-                    "Check the key, model and quota in Settings → API Keys.",
-                    "provider_failed") from exc
-            answer = (res.get("text") or "").strip()
+            primary = effective_slot("chat")
+            bad_models: List[str] = []
+            last_error: Exception | None = None
+            res: Dict[str, Any] = {}
+            answer = ""
+            for attempt in range(1, 4):
+                try:
+                    res = call_llm(primary,
+                                   "You are a precise, evidence-bound research analyst.",
+                                   prompt, max_tokens=700, temperature=0.3,
+                                   timeout=settings.agent_timeout_s,
+                                   avoid_models=bad_models)
+                except Exception as exc:
+                    last_error = exc
+                    continue
+                answer = (res.get("text") or "").strip()
+                if len(answer) >= 20:
+                    last_error = None
+                    break
+                model = str(res.get("model") or "").strip()
+                if model and model not in bad_models:
+                    bad_models.append(model)
             if len(answer) < 20:
+                if last_error is not None:
+                    raise answer_policy.AnswerUnavailable(
+                        f"The configured provider could not answer this question: {last_error}",
+                        "Check the key, model and quota in Settings → API Keys.",
+                        "provider_failed") from last_error
                 raise answer_policy.AnswerUnavailable(
-                    "The provider returned an empty chat answer; Meridian will "
-                    "not substitute a canned template.",
+                    "The provider returned an empty chat answer after retries; "
+                    "Meridian will not substitute a canned template.",
                     "Try again or pick a different model in Settings → API Keys.",
                     "unusable_output")
             allowed = {str(x.get("id")) for x in sources if isinstance(x, dict)}

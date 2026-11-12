@@ -226,7 +226,7 @@ Restart the server after editing `.env`. The data-mode badge changes to
 | `HTTP 401` | Key is wrong/expired; regenerate at the provider |
 | `HTTP 429` | Quota or rate limit; wait or switch to a free provider |
 | `timed out` | Network blocked or model cold-starting; no answer was generated |
-| `returned unusable output` | Model ignored JSON mode; Meridian refused to publish a template substitute |
+| `returned unusable output` | The model returned empty, reasoning-only, truncated or malformed output after Meridian's retries; no template substitute was published |
 | `Empty key for Ollama` | Ollama needs no key; leave the field blank on save |
 | `Stored credential could not be decrypted` | Fernet key changed — re-enter keys in Settings |
 

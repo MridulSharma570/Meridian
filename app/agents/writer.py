@@ -26,6 +26,9 @@ class WriterAgent(BaseAgent):
     verified_fields = ("markdown", "sections", "citations", "executive_summary",
                        "recommendations", "headline")
     strict_max_tokens = 4096
+    strict_retry_guidance = (
+        "The markdown must remain a complete report with a Sources section, "
+        "but aim for 500–700 words and finish the JSON object.")
 
     def local_run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
         if answer_policy.strict_mode():

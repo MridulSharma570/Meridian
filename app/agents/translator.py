@@ -208,6 +208,26 @@ class TranslatorAgent(BaseAgent):
             out = re.sub(re.escape(key), lambda m, t=translated: t, out, flags=re.I)
         return out
 
+    @staticmethod
+    def _markdown_chunks(text: str, limit: int = 5000) -> List[str]:
+        """Split markdown on line boundaries so no report tail is dropped."""
+        chunks: List[str] = []
+        current = ""
+        for line in text.splitlines(True):
+            if len(line) > limit:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                chunks.extend(line[i:i + limit] for i in range(0, len(line), limit))
+                continue
+            if current and len(current) + len(line) > limit:
+                chunks.append(current)
+                current = ""
+            current += line
+        if current:
+            chunks.append(current)
+        return chunks or [text]
+
     def translate(self, markdown: str, target: str, ctx: Dict[str, Any],
                   report_id: str = "") -> Dict[str, Any]:
         """Translate a full report; verified mode requires a real provider."""
@@ -217,22 +237,57 @@ class TranslatorAgent(BaseAgent):
                     "method": "original", "note": ""}
         if answer_policy.strict_mode():
             answer_policy.require_api(f"{LANG_NAMES[target]} translation")
-            try:
-                res = call_llm(
-                    effective_slot("translator"),
-                    "You are a professional financial translator. Translate the report into "
-                    f"{LANG_NAMES[target]}. Preserve ALL markdown syntax, tables, numbers, "
-                    "reference ids like [L01], URLs and section structure. Output only the "
-                    "translated markdown, no commentary.",
-                    markdown[:9000], max_tokens=4096, temperature=0.15,
-                    timeout=max(settings.agent_timeout_s, 60),
-                )
-            except Exception as exc:
-                raise answer_policy.AnswerUnavailable(
-                    f"The configured provider could not translate the report: {exc}",
-                    "Check the key, model and quota in Settings → API Keys.",
-                    "provider_failed") from exc
-            content = (res.get("text") or "").strip()
+            primary = effective_slot("translator")
+            bad_models: List[str] = []
+            last_error: Exception | None = None
+            res: Dict[str, Any] = {}
+            translated: List[str] = []
+
+            def translate_piece(piece: str) -> str:
+                nonlocal last_error, res
+                piece_content = ""
+                for attempt in range(1, 4):
+                    try:
+                        res = call_llm(
+                            primary,
+                            "You are a professional financial translator. Translate the report into "
+                            f"{LANG_NAMES[target]}. Preserve ALL markdown syntax, tables, numbers, "
+                            "reference ids like [L01], URLs and section structure. Output only the "
+                            "translated markdown, no commentary.",
+                            piece,
+                            max_tokens=4096 if attempt == 1 else 8192,
+                            temperature=0.15,
+                            timeout=max(settings.agent_timeout_s, 60),
+                            avoid_models=bad_models,
+                        )
+                    except Exception as exc:
+                        last_error = exc
+                        continue
+                    piece_content = (res.get("text") or "").strip()
+                    if piece_content and not res.get("completion_truncated"):
+                        last_error = None
+                        return piece_content
+                    model = str(res.get("model") or "").strip()
+                    if model and model not in bad_models:
+                        bad_models.append(model)
+                return piece_content
+
+            for piece in self._markdown_chunks(markdown):
+                piece_content = translate_piece(piece)
+                if not piece_content or res.get("completion_truncated"):
+                    if last_error is not None:
+                        raise answer_policy.AnswerUnavailable(
+                            f"The configured provider could not translate the report: {last_error}",
+                            "Check the key, model and quota in Settings → API Keys.",
+                            "provider_failed") from last_error
+                    raise answer_policy.AnswerUnavailable(
+                        "The provider returned an incomplete translation after "
+                        "retries; Meridian will not substitute a word-swapped "
+                        "pseudo-translation.",
+                        "Try a model with a larger output limit in Settings → API Keys.",
+                        "unusable_output")
+                translated.append(piece_content)
+            content = "\n".join(translated)
             if len(content) < 100:
                 raise answer_policy.AnswerUnavailable(
                     "The provider returned an unusable translation; Meridian "

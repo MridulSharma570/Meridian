@@ -28,6 +28,7 @@ from app.agents.translator import TranslatorAgent
 from app.agents.writer import WriterAgent
 from app.api.answer_policy import AnswerUnavailable
 from app.config import AGENT_SLOTS, settings
+from app.database import queries
 
 logger = logging.getLogger("meridian.orchestrator")
 
@@ -74,9 +75,22 @@ class Orchestrator:
         try:
             agent = AGENT_CLASSES[name](self.report_id, self._push)
             result = agent.run(state)
-        except AnswerUnavailable:
+        except AnswerUnavailable as exc:
             # Verified mode must fail closed. Never replace a missing/failed
-            # API or missing evidence with a plausible template result.
+            # API or missing evidence with a plausible template result. Emit
+            # a terminal event first: without it Mission Control left the
+            # agent at WORKING forever after the job had already failed.
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            self._push({"type": "agent_failed", "agent": name,
+                        "name": meta["name"], "icon": meta["icon"],
+                        "status": "failed", "elapsed_ms": elapsed_ms,
+                        "error": exc.message, "reason": exc.reason,
+                        "hint": exc.hint})
+            try:
+                queries.add_agent_log(self.report_id, name, "configured provider",
+                                      "failed", elapsed_ms, 0, 0, exc.message)
+            except Exception:
+                pass  # telemetry must never mask the real failure
             raise
         except Exception as exc:
             logger.exception("Agent %s failed hard; using safe fallback", name)
@@ -153,12 +167,26 @@ class Orchestrator:
         # Stage 5 — translation (conditional edge)
         self._push({"type": "agent_start", "agent": "translator", "name": "Translator",
                     "icon": "🌐", "status": "working"})
-        if language != "en":
-            translation = TranslatorAgent(self.report_id, self._push).translate(
-                state.get("writer", {}).get("markdown", ""), language, state, self.report_id)
-        else:
-            translation = {"language": "en", "native": "English", "content": None,
-                           "method": "not-requested", "note": ""}
+        try:
+            if language != "en":
+                translation = TranslatorAgent(self.report_id, self._push).translate(
+                    state.get("writer", {}).get("markdown", ""), language, state,
+                    self.report_id)
+            else:
+                translation = {"language": "en", "native": "English", "content": None,
+                               "method": "not-requested", "note": ""}
+        except AnswerUnavailable as exc:
+            self._push({"type": "agent_failed", "agent": "translator",
+                        "name": "Translator", "icon": "🌐", "status": "failed",
+                        "elapsed_ms": 0, "error": exc.message,
+                        "reason": exc.reason, "hint": exc.hint})
+            raise
+        except Exception as exc:
+            self._push({"type": "agent_failed", "agent": "translator",
+                        "name": "Translator", "icon": "🌐", "status": "failed",
+                        "elapsed_ms": 0, "error": str(exc),
+                        "reason": "provider_failed", "hint": ""})
+            raise
         state["translation"] = translation
         self._push({"type": "agent_done", "agent": "translator", "name": "Translator",
                     "status": "done", "elapsed_ms": 10,

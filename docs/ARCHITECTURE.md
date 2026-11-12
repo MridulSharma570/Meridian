@@ -110,7 +110,7 @@ Each node is wrapped by `BaseAgent.run()`:
 |---------|-----------|
 | No API key anywhere | Structured `409 answer_unavailable`; no report/chat/translation/comparison is generated |
 | Provider 401 / 429 / timeout | The affected answer fails; no template substitute is published |
-| Malformed LLM JSON | `extract_json()` repair is attempted; unusable output fails the step |
+| Malformed LLM JSON | `extract_json()` repairs fences/prose/truncation, the router retries reasoning-only completions with reasoning disabled and can fail over to another free model, and the agent retries with a shorter strict-JSON prompt; if all attempts fail, an `agent_failed` event terminates the step and no template is published |
 | Connector unreachable | That connector is marked `offline`; if no live evidence remains, the report is refused |
 | PostgreSQL/Redis down | SQLite / no cache |
 | Export engine error | PDF falls back to a minimal valid PDF; other exports isolated |
