@@ -111,11 +111,18 @@ def render() -> None:
             with b2:
                 if st.button("Test", key=f"test_{slot['slot']}", use_container_width=True):
                     with st.spinner("Testing…"):
-                        r = services.test_key(slot["slot"])
+                        # Probe the form values: a newly pasted key is the
+                        # thing tested, and it is saved only if it works.
+                        r = services.test_key(slot["slot"], prov,
+                                              model, key.strip())
                     if r["ok"]:
-                        st.success(f"{r['provider']} · {r['latency_ms']} ms")
+                        st.success(f"{r['provider']} · {r['latency_ms']} ms"
+                                   + (" · key saved" if r.get("saved") else ""))
+                        if r.get("saved"):
+                            st.rerun()
                     else:
-                        st.warning(r["error"])
+                        st.warning(r["error"] + (" The key you typed was not "
+                                                  "saved." if r.get("unsaved") else ""))
             with b3:
                 if st.button("Remove", key=f"del_{slot['slot']}", use_container_width=True):
                     services.delete_key(slot["slot"])

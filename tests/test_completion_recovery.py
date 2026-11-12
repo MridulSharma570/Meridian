@@ -349,6 +349,66 @@ def test_failed_reports_do_not_inflate_source_count():
         queries.delete_report(report_id)
 
 
+def test_save_key_rejects_urls_and_other_paste_mistakes():
+    with pytest.raises(ValueError, match="web address"):
+        key_manager.save_key("researcher", "openrouter_free",
+                             "https://openrouter.ai/settings/keys")
+    with pytest.raises(ValueError, match="spaces or line breaks"):
+        key_manager.save_key("researcher", "openrouter_free",
+                             "sk-or-v1-abc def-000111222")
+    with pytest.raises(ValueError, match="too short"):
+        key_manager.save_key("researcher", "groq", "gsk_short")
+
+
+def test_test_connection_probes_typed_key_and_saves_only_on_success(monkeypatch):
+    from app import services
+
+    pinned = "vendor/beta-30b:free"
+    old_key = "sk-or-v1-oldinvalid000111"
+    new_key = "sk-or-v1-newvalid000111222"
+    key_manager.save_key("writer", "openrouter_free", old_key, pinned)
+    seen_auth = []
+
+    def post(url, *, headers, json, timeout):
+        seen_auth.append(headers.get("Authorization"))
+        if headers.get("Authorization") == f"Bearer {new_key}":
+            return _completion(pinned, content="OK")
+        return FakeResponse({"error": {"message": "User not found"}},
+                            status=401)
+
+    monkeypatch.setattr(llm_router.requests, "post", post)
+    try:
+        # The typed key is probed even though a different key is stored…
+        result = services.test_key("writer", "openrouter_free", pinned, new_key)
+        assert result["ok"] is True and result["saved"] is True
+        assert seen_auth == [f"Bearer {new_key}"]
+        # …and because it passed, exactly that key is now the stored one.
+        assert key_manager.get_credentials("writer")["api_key"] == new_key
+
+        # A failing typed key never overwrites the working stored key.
+        failed = services.test_key("writer", "openrouter_free", pinned,
+                                   "sk-or-v1-wrong000111222")
+        assert failed["ok"] is False and failed["unsaved"] is True
+        assert key_manager.get_credentials("writer")["api_key"] == new_key
+    finally:
+        key_manager.delete_key("writer")
+        llm_router._reset_rate_limit_state()
+
+
+def test_save_key_api_rejects_url_with_actionable_message():
+    from fastapi.testclient import TestClient
+
+    from app.api.server import app
+
+    with TestClient(app) as client:
+        res = client.post("/api/settings/keys", json={
+            "slot": "researcher", "provider": "openrouter_free",
+            "api_key": "https://openrouter.ai/settings/keys",
+            "model": "auto:best-free"})
+        assert res.status_code == 400
+        assert "web address" in res.json()["detail"]
+
+
 def test_frontend_has_terminal_failed_mission_state():
     root = Path(__file__).resolve().parents[1]
     js = (root / "app" / "web" / "app.js").read_text(encoding="utf-8")

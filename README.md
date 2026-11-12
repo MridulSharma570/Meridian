@@ -68,7 +68,7 @@ provider key in Settings before generating a report. Interactive API docs:
 ```bash
 python run.py --streamlit           # optional Streamlit frontend on :8501
 MERIDIAN_SAMPLE_MODE=true python -m scripts.seed_data  # optional SAMPLE reports
-pytest -q                          # 120 tests
+pytest -q                          # 123 tests
 docker compose up -d --build        # full stack: app + Postgres + Redis
 ```
 
