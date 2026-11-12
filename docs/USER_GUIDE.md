@@ -155,14 +155,29 @@ independent agent cards (Researcher, Analyst, Writer, Chat, Forecast,
 Fact-Checker, optional Translator), a language list and the full provider
 catalogue.
 
+A new card above the slots — **Auto-select the best available free model** —
+shows OpenRouter's live free ranking, the recommended model, the catalogue
+state (`LIVE`, `CACHED` or `OFFLINE FALLBACK`) and a **Refresh** button. It is
+read-only information and costs nothing to open.
+
 For each slot:
 1. Pick a **provider** from the FREE or PAID group (16 options).
-2. Pick a **model** (auto-populated for that provider).
+2. Pick a **model** (auto-populated for that provider). For
+   **OpenRouter (Free)** the default is **Auto — best free model (live)**:
+   Meridian reads OpenRouter's public free-model catalogue, ranks the currently
+   available zero-cost chat models and sends an all-free fallback chain. If a
+   free model is retired or rate-limited, the next free model is tried
+   automatically and the failed one is cooled down. No paid model is ever
+   selected; the alternative **OpenRouter free router (random)** lets
+   OpenRouter pick any free model at random. You can still pin a specific
+   `…:free` slug for reproducible output.
 3. Paste the key into the password field (eye icon shows/hides it).
 4. Press **Save key** → it is Fernet-encrypted and stored; the card shows a
    masked value like `gsk_T••••••••7890`.
 5. Press **Test connection** → a real minimal request reports the provider,
-   latency and quota headers, or a clear error.
+   latency, the model that actually answered and quota headers, or a clear
+   error. On an auto slot the reported model may change between tests as the
+   free catalogue rotates.
 6. **Remove** deletes the key; the local engine takes over instantly.
 
 **Quick setup** applies one key to all seven slots — perfect when you have a

@@ -3,11 +3,36 @@
 Each provider exposes an OpenAI-compatible (or close) chat-completions
 endpoint. The router normalises the differences so agents never care which
 vendor is behind a key slot.
+
+OpenRouter's free catalogue rotates constantly — a hard-coded ``:free`` slug
+eventually returns HTTP 404. ``openrouter_free`` therefore defaults to a
+sentinel (``auto:best-free``) that the router resolves at call time from the
+live ``/api/v1/models`` catalogue. See :mod:`app.api.openrouter_auto`.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
+
+# Model-selection sentinels for OpenRouter free tier.
+OPENROUTER_AUTO_MODEL = "auto:best-free"       # pick the best live free model
+OPENROUTER_FREE_ROUTER = "openrouter/free"     # OpenRouter's own free router
+
+# No `:free` slugs are hard-coded: OpenRouter rotates them weekly. The static
+# fallback is OpenRouter's own `openrouter/free` router, and pin options are
+# populated in Settings from the live catalogue.
+
+AUTO_MODEL_LABELS: Dict[str, str] = {
+    OPENROUTER_AUTO_MODEL: "Auto — best free model (live)",
+    OPENROUTER_FREE_ROUTER: "OpenRouter free router (random)",
+}
+
+# Slugs shipped by earlier Meridian versions; both have been retired upstream.
+# Existing saved keys using them are transparently upgraded to auto-selection.
+OPENROUTER_LEGACY_MODELS: Tuple[str, ...] = (
+    "meta-llama/llama-3-8b-instruct:free",
+    "mistralai/mistral-7b-instruct:free",
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +47,8 @@ class Provider:
     key_hint: str = ""
     signup_url: str = ""
     quota_supported: bool = False
+    auto_select: bool = False
+    model_labels: Dict[str, str] = field(default_factory=dict)
     headers: Dict[str, str] = field(default_factory=dict)
 
     @property
@@ -39,9 +66,10 @@ _PROVIDERS: List[Provider] = [
              ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"),
              key_hint="AIza…", signup_url="https://aistudio.google.com/app/apikey"),
     Provider("openrouter_free", "OpenRouter (Free)", "free", "https://openrouter.ai/api/v1",
-             "meta-llama/llama-3-8b-instruct:free",
-             ("meta-llama/llama-3-8b-instruct:free", "mistralai/mistral-7b-instruct:free"),
-             key_hint="sk-or-v1-…", signup_url="https://openrouter.ai/keys", quota_supported=True),
+             OPENROUTER_AUTO_MODEL,
+             (OPENROUTER_AUTO_MODEL, OPENROUTER_FREE_ROUTER),
+             key_hint="sk-or-v1-…", signup_url="https://openrouter.ai/keys", quota_supported=True,
+             auto_select=True, model_labels=dict(AUTO_MODEL_LABELS)),
     Provider("huggingface", "Hugging Face", "free", "https://api-inference.huggingface.co/v1",
              "Qwen/Qwen2.5-72B-Instruct",
              ("Qwen/Qwen2.5-72B-Instruct", "mistralai/Mistral-7B-Instruct-v0.3"),
@@ -103,6 +131,7 @@ def list_providers() -> List[dict]:
             "models": list(p.models), "default_model": p.default_model,
             "key_hint": p.key_hint, "signup_url": p.signup_url,
             "quota_supported": p.quota_supported, "base_url": p.base_url,
+            "auto_select": p.auto_select, "model_labels": dict(p.model_labels),
         }
         for p in _PROVIDERS
     ]
@@ -113,6 +142,39 @@ def get_provider(key: str) -> Provider:
     if p is None:
         raise ValueError(f"Unknown provider: {key!r}")
     return p
+
+
+def is_allowed_model(provider_key: str, model: str) -> bool:
+    """Validate a user-chosen model without ever allowing a paid model on a
+    free provider.
+
+    For ``openrouter_free`` any ``:free`` slug is accepted even when it is not
+    in the static catalogue — the live list changes weekly and users may pin a
+    model discovered through the Settings UI.
+    """
+    if not model:
+        return True
+    p = get_provider(provider_key)
+    if model in p.models:
+        return True
+    if p.tier == "free" and p.key.startswith("openrouter"):
+        return model == OPENROUTER_FREE_ROUTER or model.endswith(":free")
+    return False
+
+
+def normalize_model(provider_key: str, model: str) -> str:
+    """Upgrade a retired hard-coded free slug to live auto-selection."""
+    if provider_key == "openrouter_free" and model in OPENROUTER_LEGACY_MODELS:
+        return OPENROUTER_AUTO_MODEL
+    return model
+
+
+def model_label(provider_key: str, model: str) -> str:
+    """Human-friendly label for sentinels; raw ID for everything else."""
+    try:
+        return get_provider(provider_key).model_labels.get(model, model)
+    except ValueError:
+        return model
 
 
 def free_providers() -> List[Provider]:

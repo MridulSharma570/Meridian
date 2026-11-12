@@ -55,6 +55,10 @@ services:
       # Render's port scan / health check never times out.
       - key: MERIDIAN_BACKGROUND_BOOTSTRAP
         value: "true"
+      # OpenRouter (Free) slots auto-select the best live zero-cost model.
+      # The catalogue lookup is public and does not consume credits.
+      - key: MERIDIAN_OPENROUTER_AUTO
+        value: "true"
       # Free tier: disable outbound connectors. Render may suspend free
       # services with unusually high service-initiated traffic.
       - key: MERIDIAN_LIVE_DATA

@@ -1,18 +1,23 @@
-"""LLM router — one normalised interface over 15 providers.
+"""LLM router — one normalised interface over 16 providers.
 
 Every agent asks the router for its *own* slot. The router resolves the slot's
 encrypted credentials, speaks the vendor's native wire format and returns
 plain text. Failures are typed and never leak the API key into logs.
+
+For ``openrouter_free`` the sentinel ``auto:best-free`` is resolved at call
+time against OpenRouter's live free catalogue; see
+:mod:`app.api.openrouter_auto`.
 """
 from __future__ import annotations
 
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import requests
 
+from app.api import openrouter_auto
 from app.api.key_manager import get_credentials, key_status
 from app.api.providers import Provider, get_provider
 from app.config import settings
@@ -73,7 +78,8 @@ def _headers(p: Provider, key: str) -> Dict[str, str]:
 
 
 def _payload(p: Provider, model: str, system: str, user: str,
-             max_tokens: int, temperature: float, json_mode: bool) -> Dict[str, Any]:
+             max_tokens: int, temperature: float, json_mode: bool,
+             fallbacks: Optional[List[str]] = None) -> Dict[str, Any]:
     if p.api_style == "anthropic":
         body: Dict[str, Any] = {
             "model": model, "max_tokens": max_tokens, "temperature": temperature,
@@ -91,6 +97,10 @@ def _payload(p: Provider, model: str, system: str, user: str,
     }
     if json_mode and p.key not in {"perplexity", "huggingface"}:
         body["response_format"] = {"type": "json_object"}
+    if fallbacks:
+        # OpenRouter's priority-ordered failover for /chat/completions. The
+        # router only builds all-free chains, so a retry can never be billed.
+        body["models"] = list(fallbacks)
     return body
 
 
@@ -119,58 +129,153 @@ def _extract(p: Provider, data: Dict[str, Any]) -> str:
     raise LLMError(f"{p.label} returned no completion text")
 
 
+def _error_for_status(p: Provider, status: int, detail: str) -> LLMError:
+    hint = ""
+    if status in (401, 403):
+        hint = " — check that the key is valid and has not expired"
+    elif status == 429:
+        hint = " — rate limit or quota exhausted; try a free provider"
+    elif status in (404, 410):
+        hint = " — this model may have been retired; try the Auto free-model option"
+    return LLMError(f"{p.label} HTTP {status}{hint}. {_safe(detail)}")
+
+
+# Errors for which another *free* model may legitimately succeed. Auth errors
+# and payments are deliberately excluded: retrying them would only waste quota.
+_RETRYABLE = {400, 404, 408, 409, 410, 429, 500, 502, 503, 504}
+_AUTO_ATTEMPTS = 3
+
+
 def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
              temperature: float = 0.35, json_mode: bool = False,
              timeout: Optional[float] = None) -> Dict[str, Any]:
-    """Execute one completion. Returns text plus usage telemetry."""
+    """Execute one completion. Returns text plus usage telemetry.
+
+    On an ``openrouter_free`` auto slot the sentinel is resolved against the
+    live free catalogue, an all-free ``models`` fallback chain is attached,
+    and a dead/rate-limited model triggers a re-resolution (never a paid one).
+    The returned ``model`` is OpenRouter's authoritative ``data["model"]`` —
+    the free model that actually answered.
+    """
     actual_slot = resolve_slot(slot)
     creds = get_credentials(actual_slot)
     if creds is None:
         raise LLMError(f"No active API key configured for the {slot} slot")
     p: Provider = creds["spec"]
-    model = creds["model"]
+    requested = creds["model"]
     key = creds["api_key"]
     if not key and p.key != "ollama":
         raise LLMError(f"Empty key for {p.label} in the {actual_slot} slot")
 
+    auto = (p.key == "openrouter_free" and
+            requested in (openrouter_auto.AUTO_MODEL, openrouter_auto.ROUTER_MODEL))
+    attempts = _AUTO_ATTEMPTS if auto else 1
     url = _endpoint(p)
-    body = _payload(p, model, system, user, max_tokens, temperature, json_mode)
+    avoid: Set[str] = set()
+    resolution = None
+    last_error: Optional[LLMError] = None
+    per_call_timeout = timeout or settings.request_timeout
     t0 = time.perf_counter()
-    try:
-        resp = requests.post(url, headers=_headers(p, key), json=body,
-                             timeout=timeout or settings.request_timeout)
-    except requests.Timeout as exc:
-        raise LLMError(f"{p.label} timed out after {timeout or settings.request_timeout}s") from exc
-    except requests.RequestException as exc:
-        raise LLMError(f"Could not reach {p.label}: {_safe(exc)}") from exc
-    elapsed = int((time.perf_counter() - t0) * 1000)
 
-    if resp.status_code >= 400:
-        detail = _safe(resp.text)
-        hint = ""
-        if resp.status_code in (401, 403):
-            hint = " — check that the key is valid and has not expired"
-        elif resp.status_code == 429:
-            hint = " — rate limit or quota exhausted; try a free provider"
-        raise LLMError(f"{p.label} HTTP {resp.status_code}{hint}. {detail}")
-    try:
-        data = resp.json()
-    except ValueError as exc:
-        raise LLMError(f"{p.label} returned non-JSON response") from exc
-    text = _extract(p, data)
-    if not text:
-        raise LLMError(f"{p.label} returned an empty completion")
+    for attempt in range(attempts):
+        chosen = requested
+        fallbacks: List[str] = []
+        structured = json_mode
+        if auto:
+            if attempt and attempt == attempts - 1:
+                # Final safety net: let OpenRouter's own capability-aware free
+                # router choose. It is always current and always zero-cost.
+                chosen = openrouter_auto.ROUTER_MODEL
+                structured = json_mode
+            else:
+                resolution = openrouter_auto.resolve(
+                    requested, json_mode=json_mode, max_tokens=max_tokens, avoid=avoid)
+                chosen = resolution.primary
+                # All-free chain for OpenRouter's server-side failover; the
+                # primary stays in `model`, so `models` holds the remaining
+                # concrete free candidates. The `openrouter/free` router slug
+                # is excluded here — it is used as a *primary* only when no
+                # concrete model is usable, because some endpoints reject
+                # router slugs inside `models`.
+                fallbacks = [m for m in resolution.fallbacks
+                             if m != chosen and m != openrouter_auto.ROUTER_MODEL]
+                structured = json_mode and resolution.json_supported
+        body = _payload(p, chosen, system, user, max_tokens, temperature,
+                        structured, fallbacks)
+        try:
+            resp = requests.post(url, headers=_headers(p, key), json=body,
+                                 timeout=per_call_timeout)
+        except requests.Timeout as exc:
+            raise LLMError(f"{p.label} timed out after {per_call_timeout}s") from exc
+        except requests.RequestException as exc:
+            raise LLMError(f"Could not reach {p.label}: {_safe(exc)}") from exc
 
-    usage = data.get("usage", {}) or {}
-    quota_headers = {k: v for k, v in resp.headers.items()
-                     if "ratelimit" in k.lower() or "quota" in k.lower()}
-    return {
-        "text": text, "provider": p.label, "model": model, "slot": actual_slot,
-        "latency_ms": elapsed,
-        "input_tokens": int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
-        "output_tokens": int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
-        "quota_headers": quota_headers,
-    }
+        if resp.status_code >= 400:
+            err = _error_for_status(p, resp.status_code, resp.text)
+            if (auto and attempt < attempts - 1 and
+                    resp.status_code in _RETRYABLE):
+                openrouter_auto.note_failure(chosen, resp.status_code)
+                avoid.add(chosen)
+                last_error = err
+                logger.info("OpenRouter auto: %s failed (HTTP %s), retrying free model",
+                            chosen, resp.status_code)
+                continue
+            raise err
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise LLMError(f"{p.label} returned non-JSON response") from exc
+        if isinstance(data, dict) and data.get("error"):
+            err = LLMError(f"{p.label}: {_safe(str(data['error'])[:300])}")
+            if auto and attempt < attempts - 1:
+                openrouter_auto.note_failure(chosen, 502)
+                avoid.add(chosen)
+                last_error = err
+                continue
+            raise err
+        try:
+            text = _extract(p, data)
+        except LLMError as exc:
+            if auto and attempt < attempts - 1:
+                openrouter_auto.note_failure(chosen, 502)
+                avoid.add(chosen)
+                last_error = exc
+                continue
+            raise
+        if not text:
+            err = LLMError(f"{p.label} returned an empty completion")
+            if auto and attempt < attempts - 1:
+                openrouter_auto.note_failure(chosen, 502)
+                avoid.add(chosen)
+                last_error = err
+                continue
+            raise err
+
+        # OpenRouter reports the model that actually served the request (which
+        # can differ from the primary when a fallback fired).
+        served = requested
+        if isinstance(data, dict) and isinstance(data.get("model"), str):
+            served = data["model"].strip() or chosen
+        elif auto:
+            served = chosen
+        if auto:
+            openrouter_auto.note_success(served)
+        usage = (data.get("usage", {}) or {}) if isinstance(data, dict) else {}
+        quota_headers = {k: v for k, v in resp.headers.items()
+                         if "ratelimit" in k.lower() or "quota" in k.lower()}
+        return {
+            "text": text, "provider": p.label, "model": served, "slot": actual_slot,
+            "requested_model": requested, "auto_selected": bool(auto),
+            "selection_source": resolution.source if resolution else "pinned",
+            "fallback_models": tuple(fallbacks),
+            "latency_ms": int((time.perf_counter() - t0) * 1000),
+            "input_tokens": int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
+            "output_tokens": int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
+            "quota_headers": quota_headers,
+        }
+
+    raise last_error or LLMError(f"{p.label}: no free model could complete the request")
 
 
 def complete(slot: str, system: str, user: str, **kwargs) -> str:

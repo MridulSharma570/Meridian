@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 59 tests should pass
+pytest -q                             # 85 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -107,7 +107,10 @@ blocks SSE entirely, the panel still resyncs via `/status` polling every 4 s.
 | `Unknown provider` | Choose from the dropdown; provider ids are internal (e.g. `openrouter_free`). |
 | `No key saved in this slot` | Press **Save key** before **Test connection**. |
 | `HTTP 401 / 403` | Invalid or expired key; regenerate it at the provider. |
-| `HTTP 429` | Rate limit / exhausted quota; wait or switch to a free provider. |
+| `HTTP 429` | Rate limit / exhausted quota; wait or switch to a free provider. On an OpenRouter auto slot the next free model is tried automatically. |
+| `HTTP 404 … this free model was retired` | OpenRouter removed a `:free` slug. Auto mode refreshes the catalogue and cools that model down for five minutes. Press **Refresh** in the Settings auto-selection panel to force a re-fetch; pin a specific model only if you need reproducibility. |
+| `No free models found` / `OFFLINE FALLBACK` | The public catalogue could not be reached (or it returned no free chat models). Meridian falls back to OpenRouter's own `openrouter/free` router — still zero cost and still current. Check `MERIDIAN_OPENROUTER_CATALOG_TIMEOUT` and outbound DNS. |
+| `returned unusable output` on an auto slot | The ranked model did not support `response_format`. Meridian only sends JSON mode when the live model declares structured-output support, then repairs output with the local engine. |
 | `Could not reach <provider>` | Sandbox/VPN/firewall blocks the host. Meridian already used the local engine — no report is lost. |
 | `timed out after 45s` | Lower `MERIDIAN_AGENT_TIMEOUT` or use Groq/Cerebras for speed. |
 | `returned unusable output` | The model ignored JSON mode. Meridian repaired what it could and kept the local analysis. |

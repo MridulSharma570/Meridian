@@ -381,6 +381,16 @@ def delete_key(slot: str) -> Dict[str, Any]:
     return {"ok": key_manager.delete_key(slot), "slot": slot}
 
 
+def openrouter_free_models(refresh: bool = False) -> Dict[str, Any]:
+    """Ranked, zero-cost OpenRouter catalogue for the Settings screen.
+
+    The catalogue endpoint is public (no API key is sent) and cached for 15
+    minutes. ``refresh=True`` forces a re-fetch from OpenRouter.
+    """
+    from app.api.openrouter_auto import describe
+    return describe(force=refresh)
+
+
 def apply_key_to_all(provider: str, api_key: str, model: str = "") -> Dict[str, Any]:
     n = key_manager.apply_to_all(provider, api_key, model)
     return {"ok": True, "slots_updated": n}

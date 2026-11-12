@@ -9,6 +9,7 @@
 const S = {
   view: 'dashboard', reportId: null,
   boot: null, settings: null, stats: null, reports: [], dashboard: null,
+  orModels: null,
   agents: {}, jobStatus: 'idle', progress: 0, eventSource: null,
   filters: { region: '', period: '', competitor: '' },
   tab: 'overview', compare: null, chatReport: null,
@@ -854,6 +855,70 @@ async function renderCompare() {
   renderCharts();
 }
 
+/* OpenRouter free-model auto-selection ------------------------------------ */
+function providerModels(spec, selected) {
+  const labels = spec?.model_labels || {};
+  const out = [], seen = new Set();
+  const add = (id, label) => { if (id && !seen.has(id)) { seen.add(id); out.push({id, label: label || id}); } };
+  (spec?.models || []).forEach(m => add(m, labels[m]));
+  // Pin options come from the live catalogue — no retired :free slug is baked in.
+  if (spec?.key === 'openrouter_free' && S.orModels?.length)
+    S.orModels.slice(0, 25).forEach(m => add(m.id, m.name ? `${m.name} · ${m.id}` : m.id));
+  if (selected) add(selected, labels[selected]);
+  return out;
+}
+
+function modelOptions(spec, selected) {
+  return providerModels(spec, selected).map(o =>
+    `<option value="${esc(o.id)}" ${o.id === selected ? 'selected' : ''}>${esc(o.label)}</option>`).join('');
+}
+
+function refreshOpenRouterModelSelects() {
+  const p = S.settings; if (!p) return;
+  $$('.slot-card').forEach(cardEl => {
+    const provSel = $('.s-provider', cardEl), modelSel = $('.s-model', cardEl);
+    if (!provSel || !modelSel || provSel.value !== 'openrouter_free') return;
+    const spec = p.providers.find(x => x.key === provSel.value);
+    const keep = modelSel.value;
+    modelSel.innerHTML = modelOptions(spec, keep);
+    modelSel.value = keep;
+  });
+}
+
+async function loadOpenRouterModels(refresh = false) {
+  const box = $('#orAutoBody'); if (!box) return;
+  box.innerHTML = '<span class="spinner"></span> Checking the live free catalogue…';
+  try {
+    const d = await api(`/api/settings/openrouter/models${refresh ? '?refresh=true' : ''}`);
+    S.orModels = d.models || [];
+    refreshOpenRouterModelSelects();
+    const state = d.source === 'live' ? 'LIVE' : d.source === 'cache' ? 'CACHED' : 'OFFLINE FALLBACK';
+    const badge = d.source === 'live' ? 'ok' : d.source === 'cache' ? 'gold' : 'warn';
+    const top = (d.models || []).slice(0, 5).map((m, i) =>
+      `<div class="or-row"><span class="or-rank">${i + 1}</span>
+       <span class="or-name">${esc(m.name)}<small>${esc(m.id)}</small></span>
+       <span class="tiny muted">${m.context_length ? Math.round(m.context_length / 1024) + 'k ctx' : 'free'}</span>
+       <span class="badge ${i === 0 ? 'ok' : 'mute'}"><i></i>${i === 0 ? 'AUTO PICK' : 'FALLBACK'}</span></div>`).join('');
+    box.innerHTML = `<div class="or-summary">
+        <span class="badge ${badge}"><i></i>${state}</span>
+        <span><b>${d.count}</b> free chat models · best available now:
+          <b class="gold mono">${esc(d.recommended_label || d.recommended)}</b></span>
+        <button class="btn btn-ghost btn-sm" data-action="or-refresh">${icon('refresh')} Refresh</button>
+      </div>
+      <div class="or-list">${top || '<p class="small muted">No live catalogue right now — OpenRouter\'s own free router is used. Free models are still selected automatically.</p>'}</div>
+      <p class="tiny muted">Ranked by context window, output length, structured-output support, tool support
+      and freshness. OpenRouter sees an all-free fallback chain, so a retired or rate-limited model is
+      replaced automatically — never by a paid one. ${d.error ? 'Catalogue note: ' + esc(d.error) : ''}
+      Last checked ${esc((d.fetched_at || '').replace('T', ' ').slice(0, 16))} UTC.</p>`;
+  } catch (e) {
+    S.orModels = [];
+    refreshOpenRouterModelSelects();
+    box.innerHTML = `<p class="small muted">Could not check the catalogue: ${esc(e.message)}.
+      Auto-selection still works using OpenRouter's built-in free router.</p>
+      <button class="btn btn-ghost btn-sm" data-action="or-refresh">${icon('refresh')} Try again</button>`;
+  }
+}
+
 async function renderSettings() {
   const p = S.settings;
   const grouped = (tier) => p.providers.filter(x => x.tier === tier).map(x =>
@@ -874,6 +939,15 @@ async function renderSettings() {
       <button class="btn btn-gold" data-action="apply-all">${icon('key')} Apply to all ${p.slots.length} slots</button>
     </div>
   </div>
+  <section class="card or-panel" style="margin-bottom:20px">
+    <div class="card-head"><div><span class="eyebrow">OPENROUTER · ZERO COST</span>
+      <h3>Auto-select the best available free model</h3>
+      <p>Choose <b>Auto — best free model (live)</b> as the model on any OpenRouter (Free) slot.
+      Meridian reads OpenRouter's live catalogue, ranks the currently free chat models and retries
+      on an all-free fallback chain. No paid model is ever used.</p></div>
+      <span class="badge gold"><i></i>AUTO</span></div>
+    <div id="orAutoBody" class="or-body"><span class="spinner"></span> Checking the live free catalogue…</div>
+  </section>
   ${sectionTitle('Independent agent key slots')}
   <div class="grid g2" id="slotGrid">`;
   p.slots.forEach(s => {
@@ -888,7 +962,7 @@ async function renderSettings() {
         <span>${s.last_test_ok === true ? '✓ tested' : s.last_test_ok === false ? '⚠ test failed' : 'not tested'}</span></div>` : ''}
       <div class="slot-grid">
         <div class="field"><label>Provider</label><select class="s-provider">${optgroups}</select></div>
-        <div class="field"><label>Model</label><select class="s-model">${models.map(m=>`<option ${m===s.model?'selected':''}>${esc(m)}</option>`).join('')}</select></div>
+        <div class="field"><label>Model</label><select class="s-model">${modelOptions(spec, s.model)}</select></div>
         <div class="field wide"><label>API key ${s.configured ? '(leave blank to keep current)' : ''}</label>
           <div class="key-input-wrap"><input type="password" class="s-key" placeholder="${esc(spec?.key_hint || 'Paste key')}" autocomplete="off" />
           <button class="icon-btn" data-action="toggle-key" title="Show / hide">${icon('eye')}</button></div></div>
@@ -898,7 +972,7 @@ async function renderSettings() {
         <button class="btn btn-outline btn-sm" data-action="test-key">${icon('refresh')} Test connection</button>
         <button class="btn btn-ghost btn-sm" data-action="delete-key">${icon('trash')}</button>
       </div>
-      <div class="slot-result tiny muted" style="margin-top:10px">${s.configured ? `Encrypted at rest · ${esc(s.model || 'default model')}` : 'Uses the local analytical engine until a key is saved.'}</div>
+      <div class="slot-result tiny muted" style="margin-top:10px">${s.configured ? `Encrypted at rest · ${esc(s.model_label || s.model || 'default model')}` : 'Uses the local analytical engine until a key is saved.'}</div>
       <div style="margin-top:10px"><a class="tiny" id="signup-${s.slot}" href="#" target="_blank" rel="noopener">Get a free key ↗</a></div>
     </section>`;
   });
@@ -911,7 +985,7 @@ async function renderSettings() {
       `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Provider</th><th>Tier</th><th>Default model</th><th>Get key</th></tr></thead><tbody>
       ${p.providers.map(x=>`<tr><td><strong>${esc(x.label)}</strong></td>
       <td><span class="badge ${x.tier==='free'?'ok':'gold'}"><i></i>${esc(x.group)}</span></td>
-      <td class="tiny mono">${esc(x.default_model)}</td>
+      <td class="tiny mono">${esc(x.model_labels?.[x.default_model] || x.default_model)}</td>
       <td><a href="${esc(x.signup_url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`).join('')}
       </tbody></table></div>`)}
   </div>`;
@@ -922,7 +996,7 @@ async function renderSettings() {
     if (s?.provider) provSel.value = s.provider;
     const sync = () => {
       const spec = p.providers.find(x => x.key === provSel.value);
-      modelSel.innerHTML = (spec?.models || []).map(m => `<option>${esc(m)}</option>`).join('');
+      modelSel.innerHTML = modelOptions(spec, s?.model);
       if (s?.model && spec?.models.includes(s.model)) modelSel.value = s.model;
       const link = $('#signup-' + cardEl.dataset.slot);
       link.href = spec?.signup_url || '#';
@@ -930,6 +1004,7 @@ async function renderSettings() {
     provSel.addEventListener('change', sync); sync();
   });
   S.chartFns.clear();
+  loadOpenRouterModels();
 }
 
 function renderGuide() {
@@ -1134,6 +1209,7 @@ document.addEventListener('click', async (ev) => {
       $('.slot-result', c).textContent = 'Key removed — local analytical engine active.';
       toast(`${slot} key removed`, 'ok'); await refreshChrome();
     }
+    else if (a === 'or-refresh') await loadOpenRouterModels(true);
     else if (a === 'apply-all') {
       const key = $('#allKey').value.trim(), provider = $('#allProvider').value;
       if (!key) { toast('Paste an API key first', 'err'); return; }
