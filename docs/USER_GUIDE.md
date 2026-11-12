@@ -13,14 +13,23 @@
 Open `http://localhost:8000`. On a fresh install Meridian seeds one complete
 demo report, so nothing is empty.
 
-**What you see:** a three-column layout. On the left, a collapsible diamond-logo
-sidebar (Dashboard, Report History, Compare Mode, API Keys, User Guide). In the
-centre, a large glass hero with the headline *"One query. The entire market
-landscape."*, a wide gold-bordered query composer, region / period / language
-dropdowns, a gold **Generate Intelligence** button and five suggested queries.
-On the right, the **Agent Activity** mission-control panel listing all seven
-agents with idle/working/done states. A small gold **Ask** bubble sits at the
-bottom right.
+**What you see on desktop:** a three-column layout. On the left, a collapsible
+diamond-logo sidebar (Dashboard, Report History, Compare Mode, API Keys, User
+Guide). In the centre, a large glass hero with the headline *"One query. The
+entire market landscape."*, a wide gold-bordered query composer, region /
+period / language dropdowns, a gold **Generate Intelligence** button and five
+suggested queries. On the right, the **Agent Activity** mission-control panel
+listing all seven agents with idle/working/done states. A small gold **Ask**
+bubble sits at the bottom right.
+
+**On tablets and phones (≤1100px):** the interface becomes a single, full-width
+column with a five-tab bar along the bottom (Home, History, Compare, Keys,
+Guide). The left sidebar and the Agent Activity panel slide in as drawers over a
+dimmed backdrop. Cards stack, KPIs stay two-up, the query composer and export
+buttons become full-width, charts and wide tables scroll horizontally, and all
+touch targets are at least 40px. Nothing is clipped or hidden off-screen. See
+[§11 Keyboard & micro-interactions](#11-keyboard--micro-interactions) for the
+two top-left controls.
 
 Four KPI cards sit below the hero: reports generated, average reliability,
 sources analysed and agent executions.
@@ -183,10 +192,24 @@ Modelled claims are flagged ⚠️ by the Fact-Checker. Set `TAVILY_API_KEY`,
 ## 11. Keyboard & micro-interactions
 
 - `Enter` inside the chat input sends the question.
-- Sidebar collapse button (top-left) toggles a 72px icon-only rail.
+- **Menu button (top-left, ≡)** — on desktop it collapses the sidebar to a
+  72px icon-only rail; press again to expand. The choice is remembered in
+  `localStorage`. On tablets/phones it opens the full navigation drawer; press
+  again, tap the dimmed backdrop, press `Escape`, use the ✕ button, or simply
+  pick a page to close it. A gold dot on the button marks an open drawer.
+- **Activity button (top-right, pulse icon)** — on desktop it hides/shows the
+  Agent Activity panel to give charts more room (also remembered). On
+  tablets/phones it slides the Agent Activity drawer in from the right. A small
+  gold pulse on the button means a report is currently running.
+- **Bottom tab bar** (tablets/phones) switches views without opening the drawer;
+  its active tab always matches the current page.
+- `Tab` stays inside an open drawer; `Escape` closes it and returns focus to
+  the button that opened it.
 - Hover any chart for a tooltip; click a legend item to hide/show a series.
-- Heatmap cells scale up on hover with their exact score.
+- Heatmap cells scale up on hover with their exact score; on phones the heatmap
+  scrolls horizontally instead of shrinking into illegibility.
 - Cards fade/slide in on view change; buttons lift slightly on hover.
+- All layouts respect `prefers-reduced-motion` and iOS safe-area insets.
 
 ---
 

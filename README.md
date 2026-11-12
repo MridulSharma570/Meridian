@@ -67,7 +67,7 @@ complete demo report so the dashboard is never empty. Interactive API docs:
 ```bash
 python run.py --streamlit           # optional Streamlit frontend on :8501
 python -m scripts.seed_data         # four curated demo reports
-pytest -q                          # 46 tests
+pytest -q                          # 59 tests
 docker compose up -d --build        # full stack: app + Postgres + Redis
 ```
 
@@ -89,6 +89,7 @@ docker compose up -d --build        # full stack: app + Postgres + Redis
 | **Compare** | Company vs company and report vs report, with verdicts and scorecards |
 | **History** | Search, filter, reopen, delete and compare every past report |
 | **Mission control** | Live agent status over Server-Sent Events, elapsed times, provider used, progress bar |
+| **Responsive by design** | Desktop three-column grid with collapsible sidebar and toggleable telemetry; tablets/phones get full-width content, off-canvas drawers with a scrim and a five-tab bottom bar. Breakpoints from 320px to 1800px+, iOS safe areas, reduced-motion support |
 | **Persistence** | PostgreSQL + JSONB + Redis, with automatic SQLite/no-cache fallback |
 
 ---

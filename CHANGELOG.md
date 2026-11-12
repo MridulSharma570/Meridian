@@ -58,4 +58,23 @@ here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_No changes yet. Add your entries here before opening a PR._
+### Added — Responsive layout
+- Complete breakpoint system (≤1500 / ≤1280 / ≤1100 / ≤700 / ≤480 / ≤380 /
+  ≥1800 / short landscape / reduced motion), plus iOS safe-area insets and
+  visible focus rings.
+- Tablet/phone layout: full-width single column, off-canvas navigation and
+  Agent Activity drawers with a scrim, and a persistent five-tab bottom bar.
+- The menu button now has a real function everywhere: collapse/expand the
+  sidebar on desktop (persisted), open/close the navigation drawer on small
+  screens (Escape, backdrop, ✕, focus trap and focus restore).
+- New Activity button: hide/show the telemetry panel on desktop, open the
+  telemetry drawer on small screens, with a live-pulse indicator.
+- Phone-friendly forms (16px inputs to stop iOS zoom, three-up selectors,
+  full-width actions), two-up KPIs, wrapping card headers, horizontal chart /
+  table / heatmap scrolling, and compact chat + toast + footer placement.
+- Equivalent responsive CSS for the secondary Streamlit frontend.
+
+### Fixed
+- No more clipped, off-screen or unusable content on narrow viewports.
+- Charts reflow on resize, orientation change and sidebar/drawer transitions.
+- Sidebar collapse no longer destroys navigation on tablet widths.

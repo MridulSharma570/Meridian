@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0A1628" />
 <meta name="description" content="Meridian — AI-powered market intelligence. Six autonomous agents, one board-ready report." />
 <title>Meridian · Market Intelligence, Redefined.</title>
@@ -42,15 +43,20 @@
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16M8 16l4-5 3 2 5-7"/></symbol>
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h7a3 3 0 013 3v13a3 3 0 00-3-3H4zM20 4h-3a3 3 0 00-3 3v13a3 3 0 013-3h3z"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
 </svg>
 
-<div class="shell">
-  <aside class="sidebar" id="sidebar">
+<!-- Dim layer behind the mobile drawers. Tapping it closes them. -->
+<div class="scrim" id="scrim" data-action="close-drawers" aria-hidden="true"></div>
+
+<div class="shell" id="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 64 64"><path d="M32 3 L59 32 L32 61 L5 32 Z" fill="none" stroke="#C9A84C" stroke-width="2"/><path d="M32 12 L50 32 L32 52 L14 32 Z" fill="none" stroke="#C9A84C" stroke-width="1" opacity=".45"/><text x="32" y="41" text-anchor="middle" font-family="Satoshi, Arial" font-weight="900" font-size="27" fill="#EDE4D3">M</text></svg>
       </div>
       <div class="brand-text"><strong>MERIDIAN</strong><span>Market Intelligence</span></div>
+      <button class="icon-btn drawer-close" data-action="close-nav" aria-label="Close navigation"><svg><use href="#i-close"/></svg></button>
     </div>
 
     <nav class="nav" id="nav">
@@ -75,12 +81,14 @@
 
   <div class="main-wrap">
     <header class="topbar">
-      <button class="icon-btn" id="collapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar"><svg><use href="#i-menu"/></svg></button>
+      <button class="icon-btn menu-btn" id="collapseBtn" title="Toggle navigation" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
+      <div class="mobile-brand" aria-hidden="true"><span>◆</span> MERIDIAN</div>
       <div class="crumb" id="crumb"><span>Meridian</span><b>/</b><strong>Dashboard</strong></div>
       <div class="top-actions">
         <div class="live-pill"><i></i><span>ENGINE ONLINE</span></div>
-        <button class="icon-btn" data-action="refresh" title="Refresh data"><svg><use href="#i-refresh"/></svg></button>
-        <button class="btn btn-gold btn-sm" data-action="new-report"><svg><use href="#i-spark"/></svg> New Report</button>
+        <button class="icon-btn" id="missionBtn" title="Toggle Agent Activity" aria-label="Toggle Agent Activity" aria-controls="mission" aria-expanded="true"><svg><use href="#i-activity"/></svg><i class="btn-pulse" id="missionPulse" hidden></i></button>
+        <button class="icon-btn" data-action="refresh" title="Refresh data" aria-label="Refresh data"><svg><use href="#i-refresh"/></svg></button>
+        <button class="btn btn-gold btn-sm new-report-btn" data-action="new-report" aria-label="New report"><svg><use href="#i-spark"/></svg><span class="btn-label">New Report</span></button>
       </div>
     </header>
 
@@ -92,10 +100,11 @@
     </footer>
   </div>
 
-  <aside class="mission" id="mission">
+  <aside class="mission" id="mission" aria-label="Agent activity">
     <div class="mission-head">
       <div><span class="eyebrow">LIVE TELEMETRY</span><h3>Agent Activity</h3></div>
       <span class="mission-status" id="missionStatus">IDLE</span>
+      <button class="icon-btn drawer-close" data-action="close-mission" aria-label="Close agent activity"><svg><use href="#i-close"/></svg></button>
     </div>
     <div class="mission-body" id="missionBody"></div>
     <div class="mission-foot">
@@ -105,6 +114,15 @@
     </div>
   </aside>
 </div>
+
+<!-- Thumb-friendly navigation for phones and tablets. -->
+<nav class="tabbar" id="tabbar" aria-label="Quick navigation">
+  <button class="tabbar-item active" data-action="nav" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Home</span></button>
+  <button class="tabbar-item" data-action="nav" data-view="history"><svg><use href="#i-file"/></svg><span>History</span></button>
+  <button class="tabbar-item" data-action="nav" data-view="compare"><svg><use href="#i-swap"/></svg><span>Compare</span></button>
+  <button class="tabbar-item" data-action="nav" data-view="settings"><svg><use href="#i-key"/></svg><span>Keys</span></button>
+  <button class="tabbar-item" data-action="nav" data-view="guide"><svg><use href="#i-book"/></svg><span>Guide</span></button>
+</nav>
 
 <div class="toast-stack" id="toasts" aria-live="polite"></div>
 <div class="chat-dock" id="chatDock" hidden>
