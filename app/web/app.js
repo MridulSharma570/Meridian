@@ -519,7 +519,7 @@ function renderMission() {
       : st === 'recovered' ? 'RECOVERED' : 'IDLE';
     const sub = st === 'done' ? `${a.provider || 'Local engine'} · ${a.elapsed_ms || 0} ms`
       : st === 'failed' ? (a.error || 'The provider could not complete this step')
-      : st === 'working' ? 'Executing specialised task…' : 'Awaiting next report';
+      : st === 'working' ? (a.retry_note || 'Executing specialised task…') : 'Awaiting next report';
     html += `<div class="agent-row ${st}"><div class="agent-ico">${meta[k][0]}</div>
       <div class="agent-txt"><b>${meta[k][1]}</b><small title="${esc(st === 'failed' ? sub : '')}">${esc(sub)}</small></div>
       <div class="agent-state">${state}</div></div>`;
@@ -542,7 +542,7 @@ function connectEvents(id) {
       if (e.type === 'agent_start') { S.agents[e.agent] = {status:'working'}; S.jobStatus = 'running'; }
       else if (e.type === 'agent_done') S.agents[e.agent] = {status:e.status || 'done', provider:e.provider, elapsed_ms:e.elapsed_ms};
       else if (e.type === 'agent_failed') S.agents[e.agent] = {status:'failed', elapsed_ms:e.elapsed_ms, error:e.error || '', reason:e.reason || ''};
-      else if (e.type === 'agent_retry') toast(e.message || 'Retrying an agent with a repaired request', 'info');
+      else if (e.type === 'agent_retry') { /* quiet: Mission Control shows the retry state; a toast per retry stacked over the failure toast */ S.agents[e.agent] = {...(S.agents[e.agent] || {}), status:'working', retry_note:'Retrying after a provider hiccup…'}; }
       else if (e.type === 'progress') S.progress = e.percent;
       else if (e.type === 'warning' || e.type === 'agent_warning') toast(e.message || 'An agent recovered from a provider issue', 'info');
       else if (e.type === 'job_complete') {

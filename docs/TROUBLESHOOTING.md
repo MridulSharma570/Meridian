@@ -12,7 +12,7 @@ Work through **1. Fast diagnostics** first — it resolves most issues.
 python --version                      # must be 3.11+
 .venv/bin/pip check                   # dependency conflicts
 python -m compileall app              # syntax errors
-pytest -q                             # 116 tests should pass
+pytest -q                             # 120 tests should pass
 curl -s http://localhost:8000/api/health | python -m json.tool
 ```
 
@@ -110,7 +110,7 @@ blocks SSE entirely, the panel still resyncs via `/status` polling every 4 s.
 | `Unknown provider` | Choose from the dropdown; provider ids are internal (e.g. `openrouter_free`). |
 | `No key saved in this slot` | Press **Save key** before **Test connection**. |
 | `HTTP 401 / 403` | Invalid or expired key; regenerate it at the provider. |
-| `HTTP 429` | Rate limit / exhausted quota; wait or switch to a free provider. On an OpenRouter auto slot the next free model is tried automatically. |
+| `HTTP 429` | Rate limit / exhausted quota. On an OpenRouter auto slot the next free model is tried automatically, and after a 429 Meridian waits out the rate-limit window (honouring `Retry-After`) before further calls instead of instantly tripping it again. If the assigned provider stays limited, the final agent attempt may use another configured **free** provider (never a paid one). A persistent 429 usually means the daily free cap is reached — wait or add a free Groq/Gemini key. |
 | `HTTP 402` on OpenRouter (Free) | OpenRouter's billing gate blocked the key/account. Meridian only sends explicit `:free` models; check the key is on the intended account/organisation, remove or raise its per-key credit limit, and check for a negative balance. A genuine `:free` model normally does not require buying credits — if the account still blocks free calls, use Groq or Gemini. The slot should read **SAVED · TEST FAILED**, not “tested”, until a new test succeeds. |
 | `HTTP 404 … this free model was retired` | OpenRouter removed a `:free` slug. Auto mode refreshes the catalogue and cools that model down for five minutes. Press **Refresh** in the Settings auto-selection panel to force a re-fetch; pin a specific model only if you need reproducibility. |
 | `No free models found` / `OFFLINE FALLBACK` | The public catalogue could not be reached (or it returned no free chat models). Meridian falls back to OpenRouter's own `openrouter/free` router — still zero cost and still current. Check `MERIDIAN_OPENROUTER_CATALOG_TIMEOUT` and outbound DNS. |

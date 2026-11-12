@@ -13,7 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
+from contextlib import nullcontext
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 import requests
@@ -40,12 +44,13 @@ class LLMError(RuntimeError):
                  category: str = "provider_error", action: str = "",
                  provider_message: str = "", kind: str = "",
                  finish_reason: str = "", reasoning_tokens: int = 0,
-                 completion_tokens: int = 0):
+                 completion_tokens: int = 0, retry_after_s: float = 0.0):
         super().__init__(message)
         self.status = status
         self.category = category
         self.action = action
         self.provider_message = provider_message
+        self.retry_after_s = retry_after_s
         # Completion diagnostics are deliberately separate from HTTP status:
         # a provider can return HTTP 200 with no usable answer at all.
         self.kind = kind or category
@@ -63,6 +68,75 @@ class LLMError(RuntimeError):
 
 def _safe(text: str) -> str:
     return _SENSITIVE.sub("<redacted>", str(text))[:800]
+
+
+# --------------------------------------------------------------------------- #
+# OpenRouter rate-limit discipline
+#
+# Free ``:free`` variants are capped per minute (and per day) at the account
+# level, so the worst response to a 429 is what Meridian used to do: retry
+# instantly from several agents at once and trip the limit again. Instead,
+# a 429 starts a shared cooldown — later OpenRouter calls wait out the
+# window (honouring Retry-After when supplied) — and OpenRouter requests
+# are serialised so parallel pipeline stages cannot burst the cap.
+# --------------------------------------------------------------------------- #
+_rate_limit_lock = threading.Lock()
+_rate_limit_until = 0.0
+_or_request_lock = threading.Lock()
+_MAX_COOLDOWN_WAIT_S = 120.0
+
+
+def _is_openrouter(p: Provider) -> bool:
+    return p.key.startswith("openrouter")
+
+
+def _parse_retry_after(headers: Any) -> float:
+    """Seconds from a Retry-After header (delta-seconds or HTTP-date)."""
+    try:
+        raw = headers.get("Retry-After") or headers.get("retry-after")
+    except AttributeError:
+        return 0.0
+    if not raw:
+        return 0.0
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        pass
+    try:
+        when = parsedate_to_datetime(str(raw))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _note_rate_limit(p: Provider, retry_after_s: float = 0.0) -> None:
+    global _rate_limit_until
+    if not _is_openrouter(p):
+        return
+    wait = retry_after_s if retry_after_s > 0 else settings.openrouter_429_cooldown_s
+    with _rate_limit_lock:
+        _rate_limit_until = max(_rate_limit_until, time.time() + max(0.0, wait))
+
+
+def _wait_out_rate_limit(p: Provider) -> None:
+    """Block until the shared OpenRouter cooldown has expired (bounded)."""
+    if not _is_openrouter(p):
+        return
+    with _rate_limit_lock:
+        remaining = _rate_limit_until - time.time()
+    wait = min(max(0.0, remaining), _MAX_COOLDOWN_WAIT_S)
+    if wait > 0:
+        logger.info("OpenRouter rate-limit cooldown: waiting %.0fs before next call", wait)
+        time.sleep(wait)
+
+
+def _reset_rate_limit_state() -> None:
+    """Test hook: clear the shared cooldown."""
+    global _rate_limit_until
+    with _rate_limit_lock:
+        _rate_limit_until = 0.0
 
 
 def resolve_slot(slot: str) -> str:
@@ -396,8 +470,10 @@ def _error_for_status(p: Provider, status: int, detail: Any) -> LLMError:
     if status == 429:
         if is_or_free:
             action = ("OpenRouter's free pool is rate-limited for now (free variants are "
-                      "capped per minute and per day). Wait a few minutes, choose Auto — "
-                      "best free model, or use a free Groq/Gemini key.")
+                      "capped per minute and per day). Meridian automatically waits out "
+                      "the limit window and retries; if this persists, the daily free "
+                      "cap may be reached — wait, choose Auto — best free model, or use "
+                      "a free Groq/Gemini key.")
         else:
             action = "The provider's rate limit or quota is exhausted. Wait, reduce usage, or choose another provider."
         return LLMError(f"{p.label} is rate-limited (HTTP 429). {action}",
@@ -476,6 +552,11 @@ def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
     per_call_timeout = timeout or settings.request_timeout
     t0 = time.perf_counter()
 
+    # If an earlier call hit the free pool's rate limit, wait out the window
+    # before sending anything else. Failover *within* this call stays
+    # immediate, because a 429 can also be specific to one model's endpoint.
+    _wait_out_rate_limit(p)
+
     model_attempt = 0
     reasoning_retry_for: Optional[str] = None
     while model_attempt < attempts or reasoning_retry_for is not None:
@@ -513,16 +594,24 @@ def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
         body = _payload(p, chosen, system, user, max_tokens, temperature,
                         structured, fallbacks,
                         disable_reasoning=is_reasoning_retry)
+        # Send OpenRouter requests one at a time: the pipeline's parallel
+        # stage must not burst the free pool's per-minute cap.
         try:
-            resp = requests.post(url, headers=_headers(p, key), json=body,
-                                 timeout=per_call_timeout)
+            with _or_request_lock if _is_openrouter(p) else nullcontext():
+                resp = requests.post(url, headers=_headers(p, key), json=body,
+                                     timeout=per_call_timeout)
         except requests.Timeout as exc:
             raise LLMError(f"{p.label} timed out after {per_call_timeout}s") from exc
         except requests.RequestException as exc:
             raise LLMError(f"Could not reach {p.label}: {_safe(exc)}") from exc
 
         if resp.status_code >= 400:
+            if resp.status_code == 429:
+                retry_after = _parse_retry_after(resp.headers)
+                _note_rate_limit(p, retry_after)
             err = _error_for_status(p, resp.status_code, resp.text)
+            if resp.status_code == 429:
+                err.retry_after_s = retry_after
             if (auto and model_attempt < attempts and
                     resp.status_code in _RETRYABLE):
                 openrouter_auto.note_failure(chosen, resp.status_code)
@@ -540,6 +629,8 @@ def call_llm(slot: str, system: str, user: str, *, max_tokens: int = 1600,
         if isinstance(data, dict) and data.get("error"):
             err = _error_for_status(p, resp.status_code if resp.status_code >= 400 else 502,
                                     data)
+            if err.status == 429 or err.category == "rate_limit":
+                _note_rate_limit(p, _parse_retry_after(resp.headers))
             if auto and model_attempt < attempts and err.status in _RETRYABLE:
                 openrouter_auto.note_failure(chosen, 502)
                 avoid.add(chosen)

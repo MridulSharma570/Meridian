@@ -27,11 +27,11 @@ from app.database import queries
 
 
 class FakeResponse:
-    def __init__(self, data):
-        self.status_code = 200
+    def __init__(self, data, status=200, headers=None):
+        self.status_code = status
         self._data = data
         self.text = json.dumps(data)
-        self.headers = {}
+        self.headers = headers or {}
 
     def json(self):
         return self._data
@@ -141,6 +141,50 @@ def test_openrouter_reasoning_budget_failure_retries_same_model_directly(monkeyp
     assert result["reasoning_retry"] is True
 
 
+def test_retry_after_parsing():
+    assert llm_router._parse_retry_after({"Retry-After": "45"}) == 45.0
+    assert llm_router._parse_retry_after({"Retry-After": "soon"}) == 0.0
+    assert llm_router._parse_retry_after({}) == 0.0
+    assert llm_router._parse_retry_after(None) == 0.0
+
+
+def test_openrouter_429_starts_cooldown_that_next_call_waits_out(monkeypatch):
+    import time as time_module
+
+    llm_router._reset_rate_limit_state()
+    pinned = "vendor/rate-limited:free"
+    key_manager.save_key("writer", "openrouter_free",
+                         "test-dummy-key-openrouter-000111", pinned)
+    bodies = []
+
+    def post(url, *, headers, json, timeout):
+        bodies.append(json)
+        if len(bodies) == 1:
+            return FakeResponse({"error": {"message": "Rate limit exceeded"}},
+                                status=429, headers={"Retry-After": "0.2"})
+        return _completion(pinned, content="Recovered after the window")
+
+    monkeypatch.setattr(llm_router.requests, "post", post)
+    try:
+        with pytest.raises(llm_router.LLMError) as exc:
+            llm_router.call_llm("writer", "sys", "user")
+        assert exc.value.status == 429
+        assert exc.value.category == "rate_limit"
+        assert exc.value.retry_after_s == pytest.approx(0.2)
+
+        started = time_module.perf_counter()
+        result = llm_router.call_llm("writer", "sys", "user")
+        elapsed = time_module.perf_counter() - started
+        # The second call waited out the provider's window instead of
+        # instantly tripping the same limit again.
+        assert elapsed >= 0.15
+        assert result["text"] == "Recovered after the window"
+        assert len(bodies) == 2
+    finally:
+        key_manager.delete_key("writer")
+        llm_router._reset_rate_limit_state()
+
+
 # --------------------------------------------------------------------------- #
 # Agent JSON recovery
 # --------------------------------------------------------------------------- #
@@ -200,6 +244,51 @@ def test_agent_retries_malformed_output_and_avoids_bad_model(monkeypatch):
     assert "RETRY 2" in calls[1]["user"]
     assert calls[1]["avoid_models"] == ["vendor/bad:free"]
     assert any(event["type"] == "agent_retry" for event in events)
+
+
+def test_rate_limited_agent_falls_back_to_another_free_provider(monkeypatch):
+    monkeypatch.delenv("MERIDIAN_SAMPLE_MODE", raising=False)
+    monkeypatch.setattr(base.answer_policy, "require_api", lambda feature: None)
+    monkeypatch.setattr(base, "effective_slot", lambda slot: "analyst")
+    monkeypatch.setattr(base, "configured_slots", lambda: ["analyst", "writer"])
+    monkeypatch.setattr(base, "get_credentials", lambda slot: {
+        "spec": SimpleNamespace(tier="free")})
+    calls = []
+
+    def fake_call(slot, system, user, **kwargs):
+        calls.append(slot)
+        if slot != "writer":
+            raise llm_router.LLMError("OpenRouter (Free) is rate-limited (HTTP 429)",
+                                      status=429, category="rate_limit")
+        return {"text": '{"summary":"Rescued by the free fallback"}',
+                "provider": "Groq", "model": "llama-3.3-70b-versatile",
+                "input_tokens": 9, "output_tokens": 4}
+
+    monkeypatch.setattr(base, "call_llm", fake_call)
+    result = _DummyAgent("", lambda event: None).run({})
+
+    assert calls == ["analyst", "analyst", "writer"]
+    assert result.data["summary"] == "Rescued by the free fallback"
+    assert result.provider == "Groq"
+
+
+def test_rate_limited_agent_never_falls_back_to_a_paid_provider(monkeypatch):
+    monkeypatch.delenv("MERIDIAN_SAMPLE_MODE", raising=False)
+    monkeypatch.setattr(base.answer_policy, "require_api", lambda feature: None)
+    monkeypatch.setattr(base, "effective_slot", lambda slot: "analyst")
+    monkeypatch.setattr(base, "configured_slots", lambda: ["analyst", "writer"])
+    monkeypatch.setattr(base, "get_credentials", lambda slot: {
+        "spec": SimpleNamespace(tier="paid")})
+    calls = []
+
+    def fake_call(slot, system, user, **kwargs):
+        calls.append(slot)
+        raise llm_router.LLMError("rate-limited", status=429, category="rate_limit")
+
+    monkeypatch.setattr(base, "call_llm", fake_call)
+    with pytest.raises(answer_policy.AnswerUnavailable):
+        _DummyAgent("", lambda event: None).run({})
+    assert calls == ["analyst", "analyst", "analyst"]
 
 
 # --------------------------------------------------------------------------- #
@@ -267,4 +356,5 @@ def test_frontend_has_terminal_failed_mission_state():
     assert "agent_failed" in js
     assert "pipeline stopped" in js
     assert "Reports completed" in js
+    assert "Retrying after a provider hiccup" in js
     assert ".agent-row.failed" in css
